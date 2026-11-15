@@ -45,6 +45,8 @@ To prevent repeated model-selection peeking from contaminating statistical hypot
 ## 4. Pre-Registered Data-Driven Hypotheses (`H1–H3`)
 All hypotheses concern empirical physical properties of the `DE-LU` and `FR` electricity grids and are evaluated strictly on the **Locked Holdout Test split** during **Sprint 3 (`US-3.1`)**, using daily/non-overlapping aggregation to prevent serial autocorrelation from inflating test statistics:
 
+*Outcome (2026-11-15):* H1, H2 and H3 were evaluated under `docs/ANALYSIS_PLAN_H1_H3.md` and all three were falsified. The hypotheses below are kept exactly as registered; results, intervals and limitations are in `docs/LOCKED_TEST_RESULTS.md`.
+
 * **H1 — Renewable Penetration & Volatility Regime (`DE-LU`):**
   * *Claim:* In `DE-LU`, hours in the top quartile of renewable generation share (`>= Q75`) exhibit both a **strictly lower median carbon intensity** and a **strictly wider calibrated 90% prediction interval** (steeper ramp uncertainty) than hours in the bottom quartile (`<= Q25`).
   * *Test & Falsification:* One-sided Mann-Whitney U test with block-bootstrap robustness check comparing `p50` and interval width `W = p95 - p05` between `>= Q75` and `<= Q25` regimes (`alpha = 0.01`). Falsified if either difference fails significance.
