@@ -13,7 +13,7 @@ Decarbonizing flexible industrial and municipal electricity demand—such as com
 Standard scheduling tools rely on **deterministic point forecasts** of grid carbon intensity (`gCO2eq/kWh`). In grids with high variable renewable energy (VRE) penetration like Germany–Luxembourg (`DE-LU`), wind and solar forecast errors create asymmetric tail risks: scheduling a 3-hour industrial batch around an optimistic point forecast can inadvertently trigger peak-hour fossil dispatch (`lignite`/`gas`).
 
 This project operationalizes an end-to-end **Databricks MLOps & Uncertainty-Aware Decision System** for `DE-LU` and France (`FR`) that:
-1. Delivers calibrated 24-hour probabilistic forecasts (`p05`, `p50`, `p95`) with guaranteed finite-sample coverage.
+1. Delivers 24-hour probabilistic forecasts (`p05`, `p50`, `p95`) whose 90% intervals are conformally calibrated and recalibrated weekly on recent forecast errors. Coverage is verified empirically: hourly grid data is autocorrelated and seasonal, so the textbook finite-sample guarantee of conformal prediction does not strictly apply.
 2. Publishes batch-exported Gold forecasts and drift diagnostics to **Tableau Public** (via packaged `.twbx` extracts) for operational planning.
 3. Provides a **grounded, tool-calling QA Copilot** (with MLflow Tracing) that answers risk-constrained dispatch and model-health questions using deterministic queries over Gold tables—never LLM-invented numbers.
 
@@ -21,18 +21,20 @@ This project operationalizes an end-to-end **Databricks MLOps & Uncertainty-Awar
 
 ## 2. Core Research & Operational Questions
 1. **Grid Regime Dynamics (`Sprint 1`):** How do diurnal, seasonal, and renewable-penetration regimes shape the distribution and autocorrelation structure of carbon intensity in `DE-LU` versus nuclear-dominated `FR`?
-2. **Horizon & Regime Uncertainty (`Sprint 1–3`):** How does predictive uncertainty (`p95 - p05` width) evolve across lead times (`t+1h` through `t+24h`) and renewable ramp regimes, and can per-`(zone, horizon_bucket)` Split CQR maintain nominal 90% coverage without look-ahead leakage?
+2. **Horizon & Regime Uncertainty (`Sprint 1–3`):** How does predictive uncertainty (`p95 - p05` width) evolve across lead times (`t+1h` through `t+24h`) and renewable ramp regimes, and can per-`(zone, horizon)` Split CQR with scheduled recalibration maintain nominal 90% coverage without look-ahead leakage?
 3. **Operational Load Shifting (`Sprint 3`):** When and under what upper-bound risk tolerances (`p95`) does domestic `DE-LU` load shifting outperform `FR` carbon parity?
 4. **Production Reliability & Grounded QA (`Sprint 2–4`):** How can automated promotion gates (`@champion`), feature drift (PSI) tracking, and trace-audited tool calling prevent silent model degradation and numeric hallucination?
 
 ---
 
 ## 3. Experimental Design & 4-Way Chronological Split
-To prevent repeated model-selection peeking from contaminating statistical hypothesis testing, the historical timeline is partitioned strictly in chronological order into **four non-overlapping blocks**:
-1. **Train Split (60%):** Fits base LightGBM quantile regressors (`tau in {0.05, 0.50, 0.95}`).
-2. **Conformal Calibration Split (15%):** Computes nonconformity residuals `E_i = max(q_0.05(x_i) - y_i, y_i - q_0.95(x_i))` per `(zone, horizon_bucket)`.
-3. **Validation / Promotion Gate Split (10%):** Used exclusively by `evaluate_gate.py` (`Gate G3`) to evaluate `@challenger` vs. `@champion` coverage and pinball loss prior to promotion.
-4. **Locked Holdout Test Split (15%):** Sealed until **Sprint 3 (`US-3.1`)** and evaluated once for pre-registered hypotheses `H1–H3`.
+To prevent repeated model-selection peeking from contaminating statistical hypothesis testing, the historical timeline is partitioned strictly in chronological order into **four non-overlapping blocks**. A forecast row belongs to a block only if its target hour also falls inside it, so no target hour is shared between blocks:
+1. **Train Split (60%):** Fits base LightGBM quantile regressors (`tau in {0.05, 0.50, 0.95}`) on the change from the origin intensity, so that persistence is the zero prediction.
+2. **Conformal Calibration Split (15%):** Supplies the first realized forecast errors for calibration. The interval is two-sided and asymmetric: lower-tail scores `q_0.05(x_i) - y_i` and upper-tail scores `y_i - q_0.95(x_i)` are each calibrated at the 95% level, separately per `(zone, horizon_h)`. The offsets are not frozen: every 7 days they are recomputed from the trailing 30 days of realized errors.
+3. **Validation / Promotion Gate Split (10%):** Used exclusively by `evaluate_gate.py` (`Gate G3`) to evaluate `@challenger` vs. `@champion` coverage and pinball loss prior to promotion. Its metrics come from a walk-forward replay of the recalibration schedule, so every forecast is calibrated only on errors observed before it.
+4. **Locked Holdout Test Split (15%):** Reserved for the pre-registered hypotheses `H1–H3` in **Sprint 3 (`US-3.1`)** and evaluated as a walk-forward under the same weekly recalibration schedule.
+
+*Disclosure:* The Locked Test was not kept fully sealed. During the pre-freeze review of November 2026 it was scored several times against the earlier model, which used static calibration, and the Sprint 1 EDA plots originally included its period (they have since been regenerated without it). That review's locked-test result prompted the move to scheduled recalibration. The window length, the target formulation and the model settings of the current model were then chosen on Gate-Val only.
 
 *Feature Scope Note:* Features combine strictly causal origin-state grid telemetry (`feature_ts <= origin_timestamp`), target calendar encodings (`target_hour`, `target_dow`, `target_month`), and—where available in the upstream snapshot—day-ahead TSO generation/load schedules published prior to `origin_timestamp`. The current Bronze snapshot exports no day-ahead schedules, prices or cross-border flows, so the model uses origin-state and calendar features only.
 

@@ -34,8 +34,8 @@ def _make_synthetic_bronze(hours: int = 72) -> pd.DataFrame:
                     "carbon_intensity_g_kwh": base_ci
                     + 25.0 * np.sin(2 * np.pi * i / 24.0)
                     + i * 0.1,
-                    "wind_share": 0.30,
-                    "solar_share": 0.15,
+                    "wind_share": 0.30 + 0.10 * np.sin(i / 7.0),
+                    "solar_share": 0.15 + 0.05 * np.cos(i / 5.0),
                     "renewable_share": 0.50,
                     "nuclear_share": 0.0 if zone == "DE-LU" else 0.70,
                     "fossil_share": 0.45 if zone == "DE-LU" else 0.05,
@@ -62,11 +62,14 @@ def test_gate_g2_temporal_invariants_and_lag_causality(tmp_path: Path) -> None:
     for col in CAUSAL_FEATURE_COLS:
         assert col in features.columns, f"Missing feature column {col}"
 
-    # 3. Perturbing future targets after origin t0 must NOT change features at or before t0
+    # 3. Perturbing EVERY input column after origin t0 must NOT change features at or before t0
     t0 = pd.Timestamp("2025-01-02 12:00:00")
     bronze_perturbed = bronze.copy()
     future_mask = bronze_perturbed["timestamp_utc"] > t0
     bronze_perturbed.loc[future_mask, "carbon_intensity_g_kwh"] = 1999.0
+    share_cols = ["wind_share", "solar_share", "renewable_share", "nuclear_share", "fossil_share"]
+    bronze_perturbed.loc[future_mask, share_cols] = 0.99
+    bronze_perturbed.loc[future_mask, "gen_total_mwh"] = 1.0
 
     features_perturbed = build_horizon_features(
         bronze_perturbed, cfg=cfg, write_output=False, base_dir=tmp_path
@@ -183,6 +186,24 @@ def test_gate_g2_audit_detects_wrong_target(tmp_path: Path) -> None:
     wrong["target_carbon_intensity"] = wrong["carbon_intensity_origin"]
     with pytest.raises(AssertionError, match="target is not the value"):
         audit_temporal_alignment(wrong, grid)
+
+
+def test_gate_g2_audit_detects_future_generation_mix(tmp_path: Path) -> None:
+    features, grid = _one_zone_features(tmp_path)
+    leaked = features.copy()
+    future_wind = grid.set_index("timestamp_utc")["wind_share"].shift(-3)
+    leaked["wind_share_origin"] = future_wind.reindex(leaked["origin_timestamp"]).to_numpy()
+    with pytest.raises(AssertionError, match="wind_share_origin"):
+        audit_temporal_alignment(leaked, grid)
+
+
+def test_gate_g2_audit_detects_centered_rolling_window(tmp_path: Path) -> None:
+    features, grid = _one_zone_features(tmp_path)
+    leaked = features.copy()
+    centered = grid.set_index("timestamp_utc")["carbon_intensity_g_kwh"].rolling(24, center=True)
+    leaked["ci_roll24_std"] = centered.std().reindex(leaked["origin_timestamp"]).to_numpy()
+    with pytest.raises(AssertionError, match="ci_roll24_std"):
+        audit_temporal_alignment(leaked.dropna(subset=["ci_roll24_std"]), grid)
 
 
 def test_splits_are_purged_at_every_boundary(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ from mlflow.tracking import MlflowClient
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS, build_horizon_features
 from carbon_mlops.models.conformal import (
+    add_conformity_scores,
     calibrate_offsets,
     conformal_quantile,
     select_calibration_window,
@@ -20,7 +21,11 @@ from carbon_mlops.models.conformal import (
 )
 from carbon_mlops.models.evaluate_gate import evaluate_and_promote_champion
 from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
-from carbon_mlops.models.train import recalibrate_forecaster, train_split_cqr
+from carbon_mlops.models.train import (
+    compute_interval_metrics,
+    recalibrate_forecaster,
+    train_split_cqr,
+)
 from tests.test_no_leakage import _make_synthetic_bronze
 
 
@@ -114,6 +119,28 @@ def test_conformal_quantile_is_the_finite_sample_order_statistic() -> None:
         conformal_quantile(np.array([]), 0.95)
 
 
+class _FixedRawQuantiles:
+    """Stub exposing predict_raw_quantiles with constant level-scale quantiles."""
+
+    def predict_raw_quantiles(self, model_input: pd.DataFrame) -> pd.DataFrame:
+        return pd.DataFrame(
+            {"raw_q05": 90.0, "raw_q50": 100.0, "raw_q95": 110.0}, index=model_input.index
+        )
+
+
+def test_conformity_scores_are_positive_exactly_when_truth_is_outside() -> None:
+    labelled = pd.DataFrame({"target_carbon_intensity": [80.0, 100.0, 125.0]})
+    scored = add_conformity_scores(_FixedRawQuantiles(), labelled)
+
+    # Truth below the lower quantile: positive low score. Above the upper: positive high score.
+    assert scored["low_score"].tolist() == [10.0, -10.0, -35.0]
+    assert scored["high_score"].tolist() == [-30.0, -10.0, 15.0]
+
+    with pytest.raises(ValueError, match="realized targets"):
+        unlabelled = pd.DataFrame({"target_carbon_intensity": [np.nan]})
+        add_conformity_scores(_FixedRawQuantiles(), unlabelled)
+
+
 def _scored_history(n_hours: int = 24 * 40) -> pd.DataFrame:
     """Synthetic scored rows for one zone and one horizon, one origin per hour."""
     origins = pd.date_range("2025-01-01", periods=n_hours, freq="h", tz="UTC")
@@ -204,9 +231,21 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
     assert (gate_preds["calibrated_as_of"] <= gate_preds["origin_timestamp"]).all()
     assert (gate_preds["p05"] <= gate_preds["p50"]).all()
     assert (gate_preds["p50"] <= gate_preds["p95"]).all()
+    metrics = artifacts.gate_val_metrics
     for zone_key in ("de_lu", "fr"):
-        assert f"gate_val_coverage_{zone_key}" in artifacts.gate_val_metrics
-        assert f"gate_val_persistence_pinball_p50_{zone_key}" in artifacts.gate_val_metrics
+        assert f"gate_val_coverage_{zone_key}" in metrics
+        # The trained median must be a better forecast than "no change from now".
+        assert (
+            metrics[f"gate_val_pinball_p50_{zone_key}"]
+            < metrics[f"gate_val_persistence_pinball_p50_{zone_key}"]
+        )
+
+    # Logged metrics are exactly what the walk-forward predictions imply.
+    truth = gate_preds["target_carbon_intensity"]
+    recomputed = float(((truth >= gate_preds["p05"]) & (truth <= gate_preds["p95"])).mean())
+    assert metrics["gate_val_coverage"] == pytest.approx(recomputed)
+    assert metrics == compute_interval_metrics(gate_preds, cfg, prefix="gate_val")
+    assert 0.0 < metrics["gate_val_coverage"] < 1.0
 
     # The registered forecaster scores every horizon and can be recalibrated on new data.
     full_origin = feats.dropna(subset=["target_carbon_intensity"]).groupby(

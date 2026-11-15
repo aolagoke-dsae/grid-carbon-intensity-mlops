@@ -2,9 +2,9 @@
 
 ## Domain & Statistical Scope (`DE-LU` & `FR`)
 - **Zones:** `["DE-LU", "FR"]` (Germany-Luxembourg vs. France electricity grids).
-- **Horizons:** `1` to `24` hours ahead (`t+1h` .. `t+24h`), grouped into horizon buckets (`1-6h`, `7-12h`, `13-24h`) for per-`(zone, horizon_bucket)` Split Conformalized Quantile Regression (CQR).
+- **Horizons:** `1` to `24` hours ahead (`t+1h` .. `t+24h`), grouped into horizon buckets (`1-6h`, `7-12h`, `13-24h`) for reporting. Split Conformalized Quantile Regression (CQR) offsets are calibrated per `(zone, horizon_h)` and recalibrated on a schedule (trailing 30 days, every 7 days; `models/conformal.py`).
 - **Target & Quantiles:** Grid carbon intensity (`gCO2eq/kWh`), predicting calibrated `[p05, p50, p95]` (nominal 90% prediction interval).
-- **4-Way Chronological Split:** Strict time-ordered split (`Train 60%` / `Calib 15%` / `Gate-Val 10%` / `Locked Test 15%`). `evaluate_gate.py` uses `Gate-Val` only; `Locked Test` is touched once in Sprint 3 for `H1-H3` using daily/non-overlapping aggregation to prevent autocorrelation bias.
+- **4-Way Chronological Split:** Strict time-ordered split (`Train 60%` / `Calib 15%` / `Gate-Val 10%` / `Locked Test 15%`). `evaluate_gate.py` uses `Gate-Val` only; `Locked Test` is reserved for `H1-H3` in Sprint 3, evaluated as a walk-forward under the recalibration schedule, using daily/non-overlapping aggregation to prevent autocorrelation bias. Splits are purged so that no target hour is shared between them.
 
 ## Canonical Project Layout & Names
 - Root helper: `Makefile` (Linux CI) and `scripts/dev.ps1` (Windows PowerShell `test` / `run-local`).

@@ -21,7 +21,7 @@ Gate-Val: DE-LU 92.46%, FR 87.37%, pooled 89.92%.
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
 | A1 | Bare `pytest` fails at collection (`No module named 'tests'`) | `tests/test_pyfunc_contract.py:17`, `ci_cd.yml` | done |
-| A2 | No git remote; CI has never run | repo | user |
+| A2 | No git remote; CI has never run | repo | done (private GitHub remote; CI green) |
 | A3 | `bundle validate` uses a dummy host/token and cannot pass | `ci_cd.yml` | done |
 | A4 | `pytest`, `ruff`, `openai` are runtime dependencies | `pyproject.toml` | done |
 | A5 | `Makefile` and `dev.ps1` lint different paths than CI (`notebooks` missing) | `Makefile`, `scripts/dev.ps1` | done |
@@ -54,7 +54,7 @@ Phase B outcome: lags are now hour-exact and 17 untrusted hours are masked. Lock
 | C1 | No 24h purge; 600 rows per boundary have targets in the next split | `train.py:35-63` | done |
 | C2 | G2 assertions are tautological and miss the lag bug | `build_features.py:135-141`, `test_no_leakage.py` | done |
 | C3 | EDA notebook reads the locked-test period | `notebooks/01_eda_and_data_quality.py` | done (plots regenerated on pre-test data; the earlier look at the test period is disclosed under F11) |
-| C4 | Calibration season (spring/summer) differs from test season (autumn/winter) | design; addressed by D2 | open |
+| C4 | Calibration season (spring/summer) differs from test season (autumn/winter) | design; addressed by D2 | done (addressed by D2) |
 | C5 | EDA notebook crashed at the heatmap (`axes.set_ylabel` on an array), so the committed plots could not be regenerated | `notebooks/01_eda_and_data_quality.py:68` | done |
 | C6 | Local scoring picked the last Gate-Val origin, which after purging has a single horizon | `batch_score.py` | done |
 
@@ -65,15 +65,44 @@ Locked-test coverage after purging: DE-LU 89.67%, FR 80.00% (Gate-Val: DE-LU 92.
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| D1 | Base model underfit: raw coverage 71–76%, loses to persistence at h=1 (MAE 23.2 vs 16.3) | `train.py:134-145` | open |
-| D2 | Static offsets do not transfer: FR test coverage 80.3% (rolling 60-day recalibration: 85.6%) | `train.py:149-173` | open |
-| D3 | Bucket-level offsets hide per-horizon miscalibration (94.7% at h=1, 89.2% at h=6) | `train.py`, `config.py` | open |
+| D1 | Base model underfit: raw coverage 71–76%, loses to persistence at h=1 (MAE 23.2 vs 16.3) | `train.py:134-145` | done |
+| D2 | Static offsets do not transfer: FR test coverage 80.3% (rolling 60-day recalibration: 85.6%) | `train.py:149-173` | done |
+| D3 | Bucket-level offsets hide per-horizon miscalibration (94.7% at h=1, 89.2% at h=6) | `train.py`, `config.py` | done |
 | D4 | DE-LU coverage is 72% in the top renewable quartile, all misses below p05 | `train.py` | open (optional before freeze) |
-| D5 | Unknown bucket silently gets a zero offset | `pyfunc_wrapper.py:87` | open |
-| D6 | Dead `else` branch that would crash on a float | `pyfunc_wrapper.py:48-53` | open |
-| D7 | `horizon_bucket` is trusted from input instead of derived from `horizon_h` | `pyfunc_wrapper.py:82-86` | open |
-| D8 | Code is asymmetric CQR; concept note describes the symmetric score | `CONCEPT_NOTE.md` §3 | open |
-| D9 | "Guaranteed finite-sample coverage" is an overclaim for autocorrelated data | `CONCEPT_NOTE.md` §1 | open |
+| D5 | Unknown bucket silently gets a zero offset | `pyfunc_wrapper.py:87` | done |
+| D6 | Dead `else` branch that would crash on a float | `pyfunc_wrapper.py:48-53` | done |
+| D7 | `horizon_bucket` is trusted from input instead of derived from `horizon_h` | `pyfunc_wrapper.py:82-86` | done |
+| D8 | Code is asymmetric CQR; concept note describes the symmetric score | `CONCEPT_NOTE.md` §3 | done |
+| D9 | "Guaranteed finite-sample coverage" is an overclaim for autocorrelated data | `CONCEPT_NOTE.md` §1 | done |
+| D10 | Conformal quantile via `np.quantile(method="higher")` landed one rank too high (intervals slightly too wide) | `models/conformal.py` | done |
+| D11 | FR at h=1 narrowly loses to persistence on Gate-Val (MAE 1.398 vs 1.372); every bucket still wins | `train.py` | open (bucket-level baseline check is E3) |
+
+Phase D outcome (all choices made on Gate-Val only; the locked test was not scored):
+
+| Gate-Val walk-forward | Static, 3 buckets | Rolling 30 days, per horizon |
+| :--- | :--- | :--- |
+| DE-LU coverage | 92.3% | 89.5% |
+| FR coverage | 87.0% | 89.0% |
+| Per-horizon coverage range | 84% – 97.5% | 87% – 92% |
+
+The 600-tree model had about 3% lower pinball loss on Gate-Val but takes 26 s to fit; the 200-tree
+model was kept to stay inside the 15 s local-run budget.
+
+## Audit of Phases A–D (2026-11-15)
+
+Each fix was deliberately broken in a scratch copy and the test suite run against it.
+24 of 28 breakages were caught. The 4 survivors exposed missing tests, now added:
+
+| Survivor | Gap | Closed by |
+| :--- | :--- | :--- |
+| A generation-mix feature reading the future | Leakage test perturbed only intensity; G2 audit checked only intensity lags | Audit now covers all origin-state features and the rolling std; perturbation test perturbs every input column |
+| Training on the level while predicting as a change | No test of forecast accuracy | Trained median must beat persistence on Gate-Val |
+| Conformity score with the wrong sign | No direct test of `add_conformity_scores` | Sign test with a stub model |
+| Gate metrics computed from other intervals | Metrics not tied to predictions | Metrics must equal a recomputation from the walk-forward predictions |
+
+Independent re-verification on the real snapshot found 0 flagged hours used as origin or target,
+0 mismatches across lags, rolling statistics and origin-state features, and 0 target hours shared
+between splits.
 
 ## Phase E: Promotion gate
 

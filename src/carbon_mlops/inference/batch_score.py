@@ -34,7 +34,7 @@ def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
     latest_origins = complete.groupby("zone")["origin_timestamp"].transform("max")
     gold_df = (
         complete[complete["origin_timestamp"] == latest_origins]
-        .drop(columns=["low_score", "high_score"])
+        .drop(columns=["low_score", "high_score", "raw_q05", "raw_q50", "raw_q95"])
         .sort_values(["zone", "horizon_h"])
         .reset_index(drop=True)
     )

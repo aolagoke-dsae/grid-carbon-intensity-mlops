@@ -114,6 +114,16 @@ LAG_HOURS_BY_FEATURE: dict[str, int] = {
 }
 
 
+ORIGIN_STATE_SOURCES: dict[str, str] = {
+    "wind_share_origin": "wind_share",
+    "solar_share_origin": "solar_share",
+    "renewable_share_origin": "renewable_share",
+    "nuclear_share_origin": "nuclear_share",
+    "fossil_share_origin": "fossil_share",
+    "gen_total_mwh_origin": "gen_total_mwh",
+}
+
+
 def audit_temporal_alignment(zone_features: pd.DataFrame, grid_df: pd.DataFrame) -> None:
     """Gate G2: re-derive every lag and target by timestamp lookup and compare.
 
@@ -140,10 +150,21 @@ def audit_temporal_alignment(zone_features: pd.DataFrame, grid_df: pd.DataFrame)
     if not np.allclose(actual_target, expected_target, equal_nan=True):
         raise AssertionError("Gate G2 violation: target is not the value at target_timestamp")
 
-    rolling_mean = series.rolling("24h", min_periods=12).mean()
-    expected_roll = rolling_mean.reindex(origin).to_numpy()
-    if not np.allclose(zone_features["ci_roll24_mean"].to_numpy(), expected_roll, equal_nan=True):
-        raise AssertionError("Gate G2 violation: ci_roll24_mean is not the trailing 24h mean")
+    trailing = series.rolling("24h", min_periods=12)
+    expected_roll = {
+        "ci_roll24_mean": trailing.mean(),
+        "ci_roll24_std": trailing.std().fillna(0.0),
+    }
+    for col, expected_series in expected_roll.items():
+        expected = expected_series.reindex(origin).to_numpy()
+        if not np.allclose(zone_features[col].to_numpy(), expected, equal_nan=True):
+            raise AssertionError(f"Gate G2 violation: {col} is not a trailing 24h statistic")
+
+    by_hour = grid_df.set_index("timestamp_utc")
+    for col, source in ORIGIN_STATE_SOURCES.items():
+        expected = by_hour[source].reindex(origin).to_numpy(dtype=float)
+        if not np.allclose(zone_features[col].to_numpy(dtype=float), expected, equal_nan=True):
+            raise AssertionError(f"Gate G2 violation: {col} is not the value of {source} at origin")
 
     if (zone_features["max_feature_timestamp"] > origin).any():
         raise AssertionError("Gate G2 violation: max_feature_timestamp exceeds origin_timestamp")
