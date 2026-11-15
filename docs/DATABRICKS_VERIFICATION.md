@@ -165,8 +165,9 @@ The snapshot ends at that hour, so these forecasts cannot be checked against out
   inside Unity Catalog. Locally this path is tested; on the workspace the gate has only run with no
   champion present.
 - The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).
-- `fe.write_table(mode="merge")`: the feature table was created fresh on each run (`create_table`
-  on attempt 1, then merged on attempt 2, which succeeded, so the merge path did run once).
+- `fe.write_table(mode="merge")` has run exactly once: the first training attempt created the
+  feature table with `create_table`, and the second attempt merged the same rows into it. A merge
+  that changes or adds rows has not been exercised.
 - The `prod` target, and the schedule (paused by design).
 - Library versions installed on serverless were not recorded.
 
