@@ -301,3 +301,22 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
     assert rejected.promoted is False
     champ_after = client.get_model_version_by_alias("conformal_carbon_forecaster", "champion")
     assert str(champ_after.version) == str(artifacts.model_version)
+
+
+def test_scoring_only_recent_calib_rows_changes_no_result(tmp_path: Path) -> None:
+    # A 2-day window on 20 days of data: most of Calib is older than the first window.
+    cfg = CarbonMLOpsConfig(recalibration_window_days=2, recalibration_step_days=1)
+    bronze = _make_synthetic_bronze(hours=480)
+    feats = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
+    artifacts = train_split_cqr(feats, cfg=cfg, n_estimators=15)
+
+    calib, gate = artifacts.splits["calib"], artifacts.splits["gate_val"]
+    window_start = gate["origin_timestamp"].min() - pd.Timedelta(days=2)
+    assert (calib["origin_timestamp"] < window_start).any(), "test needs Calib rows to skip"
+
+    full_history = pd.concat([calib, gate], ignore_index=True)
+    scored = add_conformity_scores(artifacts.forecaster, full_history)
+    reference = walk_forward_calibrated_predictions(
+        scored, gate["origin_timestamp"].min(), gate["origin_timestamp"].max(), cfg=cfg
+    )
+    assert compute_interval_metrics(reference, cfg) == artifacts.gate_val_metrics

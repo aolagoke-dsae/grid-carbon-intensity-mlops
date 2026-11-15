@@ -6,6 +6,14 @@ Cite the ID in commit messages, e.g. `fix(B3): timestamp-based lags`.
 
 Status: `open`, `done`, `deferred` (with reason), `user` (needs an action only the author can take).
 
+An item is `done` only when all of the following hold. Until then it is `implemented` or `verified`:
+
+1. **Implemented:** the change is in the code.
+2. **Verified:** `ruff` and the full test suite pass; the fix is confirmed on the real snapshot by
+   independent code; `python scripts/mutation_audit.py` reports every breakage caught; docs and this
+   register match the code.
+3. **Done:** verified, and GitHub Actions is green on the pushed commit.
+
 ## Reference numbers (committed code at `dc33e7d`, locked test)
 
 | | Reported | Reproduced | 95% CI (7-day block bootstrap) |
@@ -91,7 +99,8 @@ model was kept to stay inside the 15 s local-run budget.
 ## Audit of Phases A–D (2026-11-15)
 
 Each fix was deliberately broken in a scratch copy and the test suite run against it.
-24 of 28 breakages were caught. The 4 survivors exposed missing tests, now added:
+24 of 28 breakages were caught. The 4 survivors exposed missing tests, now added. The audit is
+repeatable: `python scripts/mutation_audit.py` (or `make audit`).
 
 | Survivor | Gap | Closed by |
 | :--- | :--- | :--- |
@@ -103,6 +112,44 @@ Each fix was deliberately broken in a scratch copy and the test suite run agains
 Independent re-verification on the real snapshot found 0 flagged hours used as origin or target,
 0 mismatches across lags, rolling statistics and origin-state features, and 0 target hours shared
 between splits.
+
+## Model freeze (2026-11-15)
+
+The Phase D selection was repeated with the final code (after the D10 quantile fix and the split
+purge), on Gate-Val only: 5 model sizes x 2 target formulations x 4 window lengths = 40 configurations.
+
+| Decision | Rule stated in advance | Result with final code |
+| :--- | :--- | :--- |
+| Target formulation | Lower Gate-Val pinball loss | Change-based beats level-based for all 5 model sizes |
+| Recalibration window | Smallest worst-zone gap from 90% coverage | 30 days wins for all 5 model sizes |
+| Model size | Lowest pinball loss within the 15 s local-run budget | 200 trees confirmed (table below) |
+
+| Model (change-based, 30-day window) | DE-LU cov | FR cov | DE-LU pinball | FR pinball | Fit time |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 120 trees | 89.3% | 88.9% | 16.78 | 0.863 | 2.9 s |
+| 150 trees | 89.5% | 89.1% | 16.84 | 0.861 | 3.3 s |
+| **200 trees (chosen)** | **89.5%** | **89.0%** | **16.55** | **0.851** | **4.1 s** |
+| 300 trees | 89.6% | 88.7% | 16.51 | 0.848 | 9.2 s |
+| 600 trees | 89.4% | 88.8% | 16.06 | 0.835 | 11.8 s |
+
+Every one of the 40 configurations beats persistence in every zone and horizon bucket.
+The 300- and 600-tree models are slightly more accurate but push the local run past 15 s.
+
+**The model is frozen from here.** Gate-Val has now informed about 40 configurations, so its coverage
+figure is mildly optimistic. No further tuning on Gate-Val; a later change needs a reason stated in
+advance, not a better score.
+
+Local run time (`python -m carbon_mlops.inference.batch_score --mode local`, full process): 15.2-16.0 s
+before, 12.6-13.8 s after (5 runs). The saving comes from not scoring Calib rows older than the first
+calibration window; gate metrics, gate predictions and final offsets are identical to scoring the
+full history (checked on the real snapshot and guarded by a test).
+
+Breakage audit after these changes: 29 of 29 caught, 0 survived, 0 stale.
+
+| Open item | State |
+| :--- | :--- |
+| D11: FR at h=1 narrowly loses to persistence | open; not tuned away, the baseline check moves into the gate (E3) |
+| Databricks code paths (Spark scoring, feature store, registry on Unity Catalog) | unverified: never executed; only verifiable on the workspace (Phase G) |
 
 ## Phase E: Promotion gate
 

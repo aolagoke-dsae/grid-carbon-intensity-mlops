@@ -250,7 +250,12 @@ def train_split_cqr(
         models_by_zone=models_by_zone, conformal_offsets={}, target_mode=cfg.target_mode
     )
 
-    history = pd.concat([splits["calib"], gate_df], ignore_index=True)
+    # Only Calib origins inside the first trailing window can ever be used for calibration,
+    # so older Calib rows are not scored. This changes no result, only the run time.
+    gate_start = gate_df["origin_timestamp"].min()
+    window_start = gate_start - pd.Timedelta(days=cfg.recalibration_window_days)
+    recent_calib = splits["calib"][splits["calib"]["origin_timestamp"] >= window_start]
+    history = pd.concat([recent_calib, gate_df], ignore_index=True)
     scored = add_conformity_scores(uncalibrated, history)
     gate_preds = walk_forward_calibrated_predictions(
         scored,

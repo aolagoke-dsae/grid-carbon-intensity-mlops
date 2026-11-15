@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("test", "run-local", "deploy")]
+    [ValidateSet("test", "audit", "run-local", "deploy")]
     [string]$Task = "test"
 )
 
@@ -11,6 +11,10 @@ switch ($Task) {
         python -m ruff check src tests notebooks scripts
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python -m pytest -v
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    "audit" {
+        python scripts/mutation_audit.py
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     "run-local" {
