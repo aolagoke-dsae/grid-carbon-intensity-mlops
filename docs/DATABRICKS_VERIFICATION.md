@@ -1,10 +1,10 @@
 # Databricks Verification Checklist (Phase G)
 
-**Status (2026-11-15): steps 1 to 11 pass on the Free Edition workspace.** Both jobs run end to end.
-Step 3 needed one fix (the MLflow experiment); the inference job passed on its first attempt. Still
-open: step 12 (re-running training against an existing champion) has not been run, the model-version
-tags were not confirmed because the CLI does not return them, and step 6 shows a small numerical
-difference from the local run.
+**Status (2026-11-15): all 12 steps have been run on the Free Edition workspace.** Eleven pass; step 6
+shows a small numerical difference from the local run. Both jobs run end to end, and the gate has now
+been exercised both without and with an existing champion. Still open: the model-version tags were
+not confirmed because the CLI does not return them; the registry currently has version 3 as champion,
+which is calibrated only through Gate-Val until the inference job is run again.
 
 ## What was verified locally, and what that does and does not show
 
@@ -56,7 +56,7 @@ Run from the repository root with the Databricks CLI authenticated against the w
 | 9 | `SELECT zone, count(*), min(origin_timestamp) FROM workspace.carbon_mlops.gold_forecasts GROUP BY zone` | 24 rows per zone, origin `2025-12-31 22:00` for both | **Pass**: 24 rows per zone, one origin (`2025-12-31 22:00 UTC`) in each, lead times 1 to 24 all present |
 | 10 | Check `p05 <= p50 <= p95` and `p05 >= 0` on every row of `gold_forecasts` | Holds on all 48 rows | **Pass**: 0 ordering violations, 0 negative lower bounds, 0 nulls, and `interval_width` equals `p95 - p05` on every row |
 | 11 | Browse the volume `workspace.carbon_mlops.exports` | `latest_24h_forecasts.csv` with 48 data rows | **Pass**: file present (20,906 bytes), 48 data rows, 24 per zone, with `p05`, `p50` and `p95` |
-| 12 | Re-run step 3 | Succeeds again; a new challenger version is compared against the current champion | Not run |
+| 12 | Re-run step 3 | Succeeds again; a new challenger version is compared against the current champion | **Pass**, run `617140816488603`: all four tasks succeed; v3 registered; the gate re-scored v3 and champion v2 on the same window, pinball ratio exactly 1.0, tie promoted v3 |
 
 If a step fails, record the error text in the "Observed" column before changing anything. The job
 schedule is paused by design: the snapshot is static, so a recurring run would rescore the same hours.
@@ -159,15 +159,35 @@ Forecast written for origin 2025-12-31 22:00 UTC (rounded, gCO2eq/kWh):
 
 The snapshot ends at that hour, so these forecasts cannot be checked against outcomes.
 
+### 2026-11-15, second training run (run `617140816488603`), checklist step 12
+
+| Task | Result |
+| :--- | :--- |
+| `ingest_bronze` | SUCCESS, 42 s |
+| `materialize_uc_features` | SUCCESS, 63 s; "Merged 839904 causal feature rows" into the existing feature table |
+| `train_challenger` | SUCCESS, 77 s; registered v3 as `challenger` |
+| `promotion_gate` | SUCCESS, 46 s; "Promoted @challenger v3 to @champion (... pinball_ratio_vs_champion=1.0, previous_champion=v2)" |
+
+What this shows:
+
+- **The gate works against an existing champion in Unity Catalog.** It loaded both registered
+  versions, re-scored both, and applied the tie rule.
+- **Training on serverless is repeatable.** The Gate-Val coverage of this run equals that of the first
+  workspace run to every printed digit (DE-LU 0.8941323766643392, FR 0.888042540960046), and the ratio
+  against the champion is exactly 1.0. So the difference from the local run (G16) is between
+  platforms, not run-to-run noise.
+
+State of the registry after this run: versions 1, 2 and 3 are `READY`; `challenger` and `champion`
+both point to version 3. Version 3 carries offsets calibrated through the end of Gate-Val
+(September). Version 2, recalibrated through 2025-12-31, is no longer champion. The inference job
+recalibrates before it scores, so running it again produces a current champion (version 4); until
+then the champion alias points at a model with older offsets than version 2.
+
 ### Still unverified after these runs
 
-- Step 12: a second training run, where the gate compares a new challenger with an existing champion
-  inside Unity Catalog. Locally this path is tested; on the workspace the gate has only run with no
-  champion present.
 - The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).
-- `fe.write_table(mode="merge")` has run exactly once: the first training attempt created the
-  feature table with `create_table`, and the second attempt merged the same rows into it. A merge
-  that changes or adds rows has not been exercised.
+- A merge into the feature table that adds or changes rows. It has merged identical rows twice.
+- A gate rejection on the workspace. Only promotions have occurred there; rejection is tested locally.
 - The `prod` target, and the schedule (paused by design).
 - Library versions installed on serverless were not recorded.
 

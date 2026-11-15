@@ -265,7 +265,7 @@ Run time of the test suite is now 11–13 s against the 15 s standard (47 tests)
 | :--- | :--- | :--- | :--- |
 | G1 | No wheel artifact, libraries or Serverless environment | `databricks.yml` | verified on the workspace 2026-11-15: bundle validates, deploys and both jobs run on serverless environment 5 |
 | G2 | `parameters` mis-indented, so scoring likely runs in local mode | `databricks.yml:44` | verified on the workspace 2026-11-15: the scoring task received `--mode databricks` and ran the Spark path |
-| G3 | No train or gate task or entry point; `@champion` is never registered | `databricks.yml`, `pyproject.toml` | verified on the workspace 2026-11-15: train, gate and recalibrate ran; step 12 (gate against an existing champion) not yet run there |
+| G3 | No train or gate task or entry point; `@champion` is never registered | `databricks.yml`, `pyproject.toml` | verified on the workspace 2026-11-15: train, gate and recalibrate ran; the gate ran both without and with an existing champion (run `617140816488603`) |
 | G4 | `carbon-ingest` reads a relative path not packaged in the wheel | `ingest_entsoe.py`, `pyproject.toml` | verified on the workspace 2026-11-15: ingest read the snapshot from the wheel; 35,082 rows |
 | G5 | Column compared to the list from `.collect()` | `batch_score.py:72-73` | verified on the workspace 2026-11-15: scoring selected the newest origin per zone |
 | G6 | Feature table written as plain Delta, then merged as a feature table with no primary key | `build_features.py:143-177` | verified on the workspace 2026-11-15: feature table created with its primary key; no clash; second run merged into it |
@@ -278,11 +278,11 @@ Run time of the test suite is now 11–13 s against the 15 s standard (47 tests)
 | G13 | Model name was resolved differently in training and in the gate | `train.resolve_model_name` | verified on the workspace 2026-11-15 |
 | G14 | The breakage audit's scratch copy lacked `databricks.yml`, so a bundle test would have failed on every breakage and made all of them look caught | `scripts/mutation_audit.py` | fixed; the audit now requires the untouched copy to pass first |
 | G15 | A wheel task has no default MLflow experiment, so `mlflow.start_run` failed on Databricks with "Could not find experiment with ID None" (found on the first workspace run; not foreseen) | `train.ensure_mlflow_experiment` | verified on the workspace: training job run `293770853415496` succeeds |
-| G16 | Gate-Val coverage differs slightly between platforms (local 0.8951 / 0.8899, Databricks 0.8941 / 0.8880) with identical data | `docs/DATABRICKS_VERIFICATION.md` | open: cause not verified; results are reproducible on the same platform only |
+| G16 | Gate-Val coverage differs slightly between platforms (local 0.8951 / 0.8899, Databricks 0.8941 / 0.8880) with identical data | `docs/DATABRICKS_VERIFICATION.md` | open: a cross-platform difference, not run-to-run noise (two workspace runs agree to every digit); the exact cause is not verified. Results are reproducible on the same platform |
 
 Phase G state (2026-11-15). **Both jobs run end to end on the Free Edition workspace.** Steps 1 to 11
 of `docs/DATABRICKS_VERIFICATION.md` pass; training run `293770853415496`, inference run
-`807621109176368`. Not yet `done`: step 12 has not been run, the model-version tags are unconfirmed,
+`807621109176368`. Step 12 passes as run `617140816488603`. Not yet `done`: the model-version tags are unconfirmed,
 G16 (small cross-platform numerical difference) is open, and CI has not been confirmed on these commits.
 
 What changed:
