@@ -1,0 +1,41 @@
+hypothesis,part,analysis,zone,quantity,estimate,ci_low,ci_high,p_value,n,supported,note
+H1,a,registered,DE-LU,"Mann-Whitney U, p50 top < bottom",-279.19303030215735,,,3.2967042916604516e-209,657/657,True,thresholds Q25=0.4273 Q75=0.7091 (evaluation period); unit: target hour; hourly values treated as independent
+H1,b,registered,DE-LU,"Mann-Whitney U, width top > bottom",-33.128761041098386,,,1.0,657/657,False,thresholds Q25=0.4273 Q75=0.7091 (evaluation period); unit: target hour; hourly values treated as independent
+H1,a,corrected,DE-LU,"median realized intensity, top - bottom",-379.49976258153185,-412.10335612442816,-340.7827084540503,,657/657,True,thresholds Q25=0.4273 Q75=0.7091 (evaluation period); unit: target hour; one-sided 99% upper bound=-335.041
+H1,b,corrected,DE-LU,"mean interval width, top - bottom",-33.128761041098386,-56.29779696849174,-6.509928743312332,,657/657,False,thresholds Q25=0.4273 Q75=0.7091 (evaluation period); unit: target hour; one-sided 99% lower bound=-61.027
+H1,context,context,DE-LU,"relative width W/p50, top quartile",0.9836388133438233,,,,657,,
+H1,context,context,DE-LU,"mean absolute error, top quartile",76.98873626956578,,,,657,,
+H1,context,context,DE-LU,"coverage, top quartile",0.8350456621004566,,,,657,,
+H1,context,context,DE-LU,"mean width, top quartile",238.45270205271348,,,,657,,
+H1,context,context,DE-LU,"relative width W/p50, bottom quartile",0.5445741313743082,,,,657,,
+H1,context,context,DE-LU,"mean absolute error, bottom quartile",62.59541606193357,,,,657,,
+H1,context,context,DE-LU,"coverage, bottom quartile",0.8546596097965963,,,,657,,
+H1,context,context,DE-LU,"mean width, bottom quartile",271.58146309381186,,,,657,,
+H1,a,sensitivity,DE-LU,"median realized intensity, top - bottom",-385.6337389318852,-417.6771420818529,-348.28808289092603,,609/649,,thresholds Q25=0.4253 Q75=0.7181 (Train period); unit: target hour; one-sided 99% upper bound=-343.593
+H1,b,sensitivity,DE-LU,"mean interval width, top - bottom",-34.4656051921138,-57.39672642299473,-7.499144200547107,,609/649,,thresholds Q25=0.4253 Q75=0.7181 (Train period); unit: target hour; one-sided 99% lower bound=-62.409
+H1,context,context,DE-LU,"mean width top - bottom, day_ahead_13_24h",-19.556281279203233,,,,31218,,
+H1,context,context,DE-LU,"mean width top - bottom, mid_7_12h",-41.26991200706047,,,,15663,,
+H1,context,context,DE-LU,"mean width top - bottom, short_1_6h",-46.960050096013575,,,,15700,,
+H2,,registered,DE-LU vs FR,"paired Wilcoxon, daily midday mean DE-LU < FR",180.54979506655445,,,0.9999999998806758,53 of 106 days,False,"threshold=0.5661 (evaluation-period median); mean DE-LU=207.4, mean FR=26.8"
+H2,,corrected,DE-LU vs FR,days with DE-LU < FR among qualifying days,0.0,,,,53 of 106 days,False,smallest daily gap DE-LU - FR = 69.9 gCO2eq/kWh; descriptive
+H2,,sensitivity,DE-LU vs FR,"paired Wilcoxon, daily midday mean DE-LU < FR",189.22709503925662,,,0.9999999999880496,59 of 106 days,,"threshold=0.5295 (same dates one year earlier); mean DE-LU=217.2, mean FR=28.0"
+H3,a,corrected,DE-LU,"importance ratio origin-state / calendar, short_1_6h",7.439436205198168,5.169562521731643,12.021496683091986,,15306,,"mean loss increase: origin-state=61.2253, calendar=8.2298"
+H3,a,registered,DE-LU,"single-feature importance ratio, short_1_6h",7.222302792690364,,,,15306,,"top features: carbon_intensity_origin=70.466, solar_share_origin=6.575, target_hour_cos=6.050"
+H3,a,corrected,DE-LU,"importance ratio origin-state / calendar, day_ahead_13_24h",4.668228659610241,2.968458021819345,8.3730254737457,,30612,,"mean loss increase: origin-state=32.8759, calendar=7.0425"
+H3,a,registered,DE-LU,"single-feature importance ratio, day_ahead_13_24h",6.525833072486645,,,,30612,,"top features: carbon_intensity_origin=52.050, target_hour_cos=4.210, solar_share_origin=2.912"
+H3,a,corrected,DE-LU,reversal: ratio interval above 1 at 1-6h and below 1 at 13-24h,,,,,,False,
+H3,a,registered,DE-LU,reversal: point ratio above 1 at 1-6h and below 1 at 13-24h,,,,,,False,approximation: the registered per-horizon models do not exist
+H3,a,corrected,FR,"importance ratio origin-state / calendar, short_1_6h",5.373119183068843,4.340115498861822,6.8730421570463,,15270,,"mean loss increase: origin-state=4.4644, calendar=0.8309"
+H3,a,registered,FR,"single-feature importance ratio, short_1_6h",6.142003809264999,,,,15270,,"top features: carbon_intensity_origin=4.859, target_hour_cos=0.521, target_hour_sin=0.227"
+H3,a,corrected,FR,"importance ratio origin-state / calendar, day_ahead_13_24h",4.08362738977978,2.9818075623845837,6.00537440029073,,30540,,"mean loss increase: origin-state=3.0038, calendar=0.7356"
+H3,a,registered,FR,"single-feature importance ratio, day_ahead_13_24h",4.918129381851388,,,,30540,,"top features: carbon_intensity_origin=3.439, target_dow=0.332, target_hour_cos=0.309"
+H3,a,corrected,FR,reversal: ratio interval above 1 at 1-6h and below 1 at 13-24h,,,,,,False,
+H3,a,registered,FR,reversal: point ratio above 1 at 1-6h and below 1 at 13-24h,,,,,,False,approximation: the registered per-horizon models do not exist
+H3,b,registered,pooled,"paired Wilcoxon, width 13-24h > 1-6h, 00:00 UTC origins",100.0013212155667,,,7.862065720846585e-37,212,True,zones pooled as registered; pairs from the two zones are not independent
+H3,b,registered,DE-LU,"paired Wilcoxon, width 13-24h > 1-6h, 00:00 UTC origins",189.92553298421348,,,1.9960851797597312e-19,106,,share of days positive=1.000
+H3,b,registered,FR,"paired Wilcoxon, width 13-24h > 1-6h, 00:00 UTC origins",10.077109446919929,,,2.0538093836675287e-19,106,,share of days positive=0.991
+H3,b,corrected,DE-LU,"Wilcoxon, daily abs error 13-24h > 1-6h, all origin hours",47.23696962132898,,,1.0228426842235636e-19,109,True,share of days positive=0.982
+H3,b,corrected,FR,"Wilcoxon, daily abs error 13-24h > 1-6h, all origin hours",2.6182949082473868,,,1.8622652538611116e-17,109,True,share of days positive=0.890
+H1,verdict,verdict,,falsified,,,,,,False,"corrected=False, registered=False"
+H2,verdict,verdict,,falsified (descriptive; outcome known in advance),,,,,,False,"corrected=False, registered=False"
+H3,verdict,verdict,,falsified,,,,,,False,"corrected=False, registered=False"
