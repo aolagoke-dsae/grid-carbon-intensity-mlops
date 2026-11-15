@@ -225,7 +225,6 @@ def train_split_cqr(
                 python_model=forecaster,
                 signature=signature,
                 input_example=sample_in,
-                input_example=sample_in,
                 pip_requirements=forecaster.pip_requirements,
                 registered_model_name=model_name,
             )

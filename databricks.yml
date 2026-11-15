@@ -1,4 +1,4 @@
-﻿bundle:
+bundle:
   name: grid-carbon-intensity-mlops
 
 variables:
@@ -19,12 +19,26 @@ resources:
     carbon_training_pipeline:
       name: "[${bundle.target}] carbon-training-pipeline"
       tasks:
-        - task_key: ingest_and_features
-          notebook_task:
-            notebook_path: ./notebooks/01_eda_and_data_quality.py
+        - task_key: ingest_bronze
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-ingest
+        - task_key: materialize_uc_features
+          depends_on:
+            - task_key: ingest_bronze
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-features
+
     carbon_batch_inference:
       name: "[${bundle.target}] carbon-batch-inference"
+      schedule:
+        quartz_cron_expression: "0 15 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
       tasks:
-        - task_key: score_and_monitor
-          notebook_task:
-            notebook_path: ./notebooks/02_cqr_calibration_analysis.py
+        - task_key: spark_udf_batch_score
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-score
+          parameters: ["--mode", "databricks"]

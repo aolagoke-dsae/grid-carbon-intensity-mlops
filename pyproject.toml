@@ -33,3 +33,7 @@ select = ["E", "F", "I", "W"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+[project.scripts]
+carbon-ingest = "carbon_mlops.ingestion.ingest_entsoe:ingest_bronze_snapshot"
+carbon-features = "carbon_mlops.features.build_features:run_feature_pipeline"
+carbon-score = "carbon_mlops.inference.batch_score:main"
