@@ -305,6 +305,18 @@ Local evidence:
   2025-12-31 23:00 UTC with all 48 offset cells; it scored origin 2025-12-31 22:00 for both zones.
 - 53 tests in about 12.5 s. Breakage audit: 58 of 58 caught, with the baseline check passing.
 
+Verification state at commit `2da4336` (2026-11-15, on mains power):
+
+| Check | Result |
+| :--- | :--- |
+| `ruff check src tests notebooks scripts` | clean |
+| Test suite | 57 tests, 11.0 to 11.9 s over five runs |
+| Breakage audit | 59 of 59 caught, 0 survived, 0 stale, baseline passing (429 s) |
+| Databricks checklist | 12 steps run, 11 pass, step 6 records a cross-platform difference |
+
+The test suite takes 45 to 60 s when the laptop is on battery with the processor throttled. That is
+an effect of the machine's power state, not of the code: the same suite runs in 11 s on mains.
+
 ## Dependencies
 
 - B before D: fixing lags and partial hours changes the training data.
