@@ -1,0 +1,30 @@
+﻿bundle:
+  name: grid-carbon-intensity-mlops
+
+variables:
+  catalog:
+    default: workspace
+  schema:
+    default: carbon_mlops
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+
+resources:
+  jobs:
+    carbon_training_pipeline:
+      name: "[${bundle.target}] carbon-training-pipeline"
+      tasks:
+        - task_key: ingest_and_features
+          notebook_task:
+            notebook_path: ./notebooks/01_eda_and_data_quality.py
+    carbon_batch_inference:
+      name: "[${bundle.target}] carbon-batch-inference"
+      tasks:
+        - task_key: score_and_monitor
+          notebook_task:
+            notebook_path: ./notebooks/02_cqr_calibration_analysis.py

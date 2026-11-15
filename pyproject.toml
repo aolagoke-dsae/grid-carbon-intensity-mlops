@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "grid-carbon-intensity-mlops"
+version = "0.1.0"
+description = "24-Hour Probabilistic Grid Carbon Intensity Forecasting & MLOps Pipeline (DE-LU & FR)"
+requires-python = ">=3.11"
+dependencies = [
+    "lightgbm>=4.3.0",
+    "mlflow>=2.16.0",
+    "openai>=1.45.0",
+    "matplotlib>=3.9.0",
+    "scipy>=1.13.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "pyarrow>=17.0.0",
+    "pytest>=8.3.0",
+    "ruff>=0.6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/carbon_mlops"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

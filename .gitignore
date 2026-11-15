@@ -1,0 +1,17 @@
+﻿.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+mlruns/
+.databricks/
+*.whl
+build/
+dist/
+*.egg-info/
+
+# Keep portfolio snapshots, images & BI extracts tracked
+!data/bronze_snapshot/
+!docs/images/
+!dashboards/data/
