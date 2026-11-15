@@ -27,19 +27,24 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
     cfg.images_dir.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
 
-    # 1. Zone distributions (DE-LU vs FR)
-    fig, ax = plt.subplots(figsize=(9, 4.5), dpi=150)
-    for zone, color in [("DE-LU", "#d95f02"), ("FR", "#1b9e77")]:
+    # 1. Two-panel Zone Distributions (DE-LU vs FR with independent scales)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.3), dpi=150)
+    zone_styles = [("DE-LU", "#d95f02"), ("FR", "#1b9e77")]
+    for ax, (zone, color) in zip(axes, zone_styles, strict=True):
         vals = df.loc[df["zone"] == zone, "carbon_intensity_g_kwh"].dropna()
-        ax.hist(vals, bins=50, alpha=0.55, density=True, label=f"{zone} (median={vals.median():.1f})", color=color)
-    ax.set_title("Hourly Grid Carbon Intensity Distribution: DE-LU vs. FR (2024–2025)")
-    ax.set_xlabel("Carbon Intensity (gCO2eq/kWh)")
-    ax.set_ylabel("Density")
-    ax.legend()
-    ax.grid(alpha=0.25)
+        q25, med, q75 = np.percentile(vals, [25, 50, 75])
+        ax.hist(vals, bins=45, alpha=0.65, density=True, color=color, edgecolor="white", linewidth=0.4)
+        ax.axvline(med, color="#222222", linestyle="--", linewidth=1.5, label=f"Median: {med:.1f}")
+        ax.axvspan(q25, q75, color=color, alpha=0.15, label=f"IQR: {q25:.1f}–{q75:.1f}")
+        ax.set_title(f"{zone} Hourly Carbon Intensity (2024–2025)")
+        ax.set_xlabel("Carbon Intensity (gCO2eq/kWh)")
+        ax.set_ylabel("Probability Density")
+        ax.legend(frameon=True, fontsize=9)
+        ax.grid(alpha=0.25)
+    fig.suptitle("Regime Comparison: Variable Renewable/Fossil (DE-LU) vs. Nuclear Baseload (FR)", y=1.02)
     p1 = cfg.images_dir / "eda_zone_distributions.png"
     fig.tight_layout()
-    fig.savefig(p1)
+    fig.savefig(p1, bbox_inches="tight")
     plt.close(fig)
     outputs.append(p1)
 
@@ -54,7 +59,7 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
         ax.set_xticks(range(12))
         ax.set_xticklabels([str(m) for m in range(1, 13)])
         fig.colorbar(im, ax=ax, label="gCO2eq/kWh")
-    axes[0].set_ylabel("Hour (UTC)")
+    axes.set_ylabel("Hour (UTC)")
     p2 = cfg.images_dir / "eda_diurnal_heatmap.png"
     fig.tight_layout()
     fig.savefig(p2)
@@ -64,7 +69,7 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
     # 3. Autocorrelation up to 72h lags
     fig, ax = plt.subplots(figsize=(9, 4.2), dpi=150)
     lags = np.arange(1, 73)
-    for zone, color in [("DE-LU", "#d95f02"), ("FR", "#1b9e77")]:
+    for zone, color in zone_styles:
         series = df.loc[df["zone"] == zone].sort_values("timestamp_utc")["carbon_intensity_g_kwh"].dropna()
         acfs = [series.autocorr(lag=int(k)) for k in lags]
         ax.plot(lags, acfs, label=zone, color=color, linewidth=1.8)
