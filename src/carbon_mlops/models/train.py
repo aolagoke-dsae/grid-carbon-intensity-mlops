@@ -32,35 +32,64 @@ class TrainingArtifacts:
     model_version: str | None = None
 
 
+SPLIT_ORDER: tuple[str, ...] = ("train", "calib", "gate_val", "locked_test")
+
+
+def compute_split_boundaries(
+    features_df: pd.DataFrame,
+    cfg: CarbonMLOpsConfig | None = None,
+) -> dict[str, pd.Timestamp]:
+    """Return the last origin_timestamp of Train, Calib and Gate-Val (Locked Test follows)."""
+    cfg = cfg or CarbonMLOpsConfig()
+    labelled = features_df.dropna(subset=["target_carbon_intensity"])
+    origins = pd.DatetimeIndex(labelled["origin_timestamp"].unique()).sort_values()
+    n = len(origins)
+
+    r_train, r_calib, r_gate, _ = cfg.split_ratios
+    return {
+        "train": origins[int(n * r_train) - 1],
+        "calib": origins[int(n * (r_train + r_calib)) - 1],
+        "gate_val": origins[int(n * (r_train + r_calib + r_gate)) - 1],
+    }
+
+
+def assert_splits_do_not_overlap(splits: dict[str, pd.DataFrame]) -> None:
+    """Raise if any split's targets reach into the origins of the split that follows it."""
+    present = [name for name in SPLIT_ORDER if name in splits and not splits[name].empty]
+    for earlier, later in zip(present[:-1], present[1:], strict=True):
+        last_target = splits[earlier]["target_timestamp"].max()
+        first_origin = splits[later]["origin_timestamp"].min()
+        if last_target >= first_origin:
+            raise AssertionError(
+                f"Split leakage: {earlier} targets reach {last_target}, "
+                f"but {later} origins start at {first_origin}"
+            )
+
+
 def chronological_four_way_split(
     features_df: pd.DataFrame,
     cfg: CarbonMLOpsConfig | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Partition supervised horizon rows by origin_timestamp into Train/Calib/GateVal/Test."""
+    """Partition supervised horizon rows by origin_timestamp into Train/Calib/GateVal/Test.
+
+    Rows are purged at every boundary: a row belongs to a split only if its target also
+    falls inside that split. Without this, the last 24 hours of origins in one split carry
+    labels that the next split uses as features and as its own labels.
+    """
     cfg = cfg or CarbonMLOpsConfig()
     df = features_df.dropna(subset=["target_carbon_intensity"]).copy()
-    origins = np.sort(df["origin_timestamp"].unique())
-    n = len(origins)
+    ends = compute_split_boundaries(df, cfg=cfg)
+    origin, target = df["origin_timestamp"], df["target_timestamp"]
 
-    r_train, r_calib, r_gate, _ = cfg.split_ratios
-    i_train = int(n * r_train)
-    i_calib = int(n * (r_train + r_calib))
-    i_gate = int(n * (r_train + r_calib + r_gate))
-
-    t_train_end = origins[i_train - 1]
-    t_calib_end = origins[i_calib - 1]
-    t_gate_end = origins[i_gate - 1]
-
-    return {
-        "train": df[df["origin_timestamp"] <= t_train_end].reset_index(drop=True),
-        "calib": df[
-            (df["origin_timestamp"] > t_train_end) & (df["origin_timestamp"] <= t_calib_end)
-        ].reset_index(drop=True),
-        "gate_val": df[
-            (df["origin_timestamp"] > t_calib_end) & (df["origin_timestamp"] <= t_gate_end)
-        ].reset_index(drop=True),
-        "locked_test": df[df["origin_timestamp"] > t_gate_end].reset_index(drop=True),
+    splits = {
+        "train": df[target <= ends["train"]],
+        "calib": df[(origin > ends["train"]) & (target <= ends["calib"])],
+        "gate_val": df[(origin > ends["calib"]) & (target <= ends["gate_val"])],
+        "locked_test": df[origin > ends["gate_val"]],
     }
+    splits = {name: part.reset_index(drop=True) for name, part in splits.items()}
+    assert_splits_do_not_overlap(splits)
+    return splits
 
 
 def pinball_loss(y_true: np.ndarray, y_pred: np.ndarray, alpha: float) -> float:

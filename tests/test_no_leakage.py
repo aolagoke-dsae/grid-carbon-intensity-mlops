@@ -6,12 +6,19 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import (
     CAUSAL_FEATURE_COLS,
+    audit_temporal_alignment,
     build_horizon_features,
     materialize_uc_feature_table,
+    regularize_zone_to_hourly_grid,
+)
+from carbon_mlops.models.train import (
+    assert_splits_do_not_overlap,
+    chronological_four_way_split,
 )
 
 
@@ -142,3 +149,74 @@ def test_partial_and_incomplete_hours_are_masked(tmp_path: Path) -> None:
     # The other zone is untouched.
     fr_feats = features[features["zone"] == "FR"]
     assert fr_feats["origin_timestamp"].isin(flagged).any()
+
+
+def _one_zone_features(tmp_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    cfg = CarbonMLOpsConfig()
+    bronze = _make_synthetic_bronze(hours=96)
+    features = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
+    grid = regularize_zone_to_hourly_grid(bronze[bronze["zone"] == "DE-LU"])
+    return features[features["zone"] == "DE-LU"].reset_index(drop=True), grid
+
+
+def test_gate_g2_audit_detects_misaligned_lag(tmp_path: Path) -> None:
+    features, grid = _one_zone_features(tmp_path)
+    audit_temporal_alignment(features, grid)
+
+    shifted = features.copy()
+    shifted["ci_lag_3h"] = shifted["ci_lag_6h"]
+    with pytest.raises(AssertionError, match="ci_lag_3h"):
+        audit_temporal_alignment(shifted, grid)
+
+
+def test_gate_g2_audit_detects_future_value_as_feature(tmp_path: Path) -> None:
+    features, grid = _one_zone_features(tmp_path)
+    leaked = features.copy()
+    leaked["carbon_intensity_origin"] = leaked["target_carbon_intensity"]
+    with pytest.raises(AssertionError, match="carbon_intensity_origin"):
+        audit_temporal_alignment(leaked, grid)
+
+
+def test_gate_g2_audit_detects_wrong_target(tmp_path: Path) -> None:
+    features, grid = _one_zone_features(tmp_path)
+    wrong = features.copy()
+    wrong["target_carbon_intensity"] = wrong["carbon_intensity_origin"]
+    with pytest.raises(AssertionError, match="target is not the value"):
+        audit_temporal_alignment(wrong, grid)
+
+
+def test_splits_are_purged_at_every_boundary(tmp_path: Path) -> None:
+    cfg = CarbonMLOpsConfig()
+    bronze = _make_synthetic_bronze(hours=480)
+    features = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
+    splits = chronological_four_way_split(features, cfg=cfg)
+
+    names = ["train", "calib", "gate_val", "locked_test"]
+    assert all(len(splits[n]) > 0 for n in names)
+    for earlier, later in zip(names[:-1], names[1:], strict=True):
+        assert splits[earlier]["target_timestamp"].max() < splits[later]["origin_timestamp"].min()
+
+    # No (zone, target hour) label is shared between any two splits.
+    seen: set[tuple[str, pd.Timestamp]] = set()
+    for n in names:
+        labels = set(zip(splits[n]["zone"], splits[n]["target_timestamp"], strict=True))
+        assert not (labels & seen), f"{n} shares target hours with an earlier split"
+        seen |= labels
+
+    # The locked test keeps every horizon of every one of its origins.
+    per_origin = splits["locked_test"].groupby(["zone", "origin_timestamp"]).size()
+    assert per_origin.max() == len(cfg.horizons)
+
+
+def test_split_overlap_check_fails_on_unpurged_splits(tmp_path: Path) -> None:
+    cfg = CarbonMLOpsConfig()
+    bronze = _make_synthetic_bronze(hours=480)
+    features = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
+    labelled = features.dropna(subset=["target_carbon_intensity"])
+    cut = labelled["origin_timestamp"].sort_values().iloc[len(labelled) // 2]
+    unpurged = {
+        "train": labelled[labelled["origin_timestamp"] <= cut],
+        "calib": labelled[labelled["origin_timestamp"] > cut],
+    }
+    with pytest.raises(AssertionError, match="Split leakage"):
+        assert_splits_do_not_overlap(unpurged)

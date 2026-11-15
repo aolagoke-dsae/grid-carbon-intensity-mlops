@@ -51,10 +51,15 @@ Phase B outcome: lags are now hour-exact and 17 untrusted hours are masked. Lock
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| C1 | No 24h purge; 600 rows per boundary have targets in the next split | `train.py:35-63` | open |
-| C2 | G2 assertions are tautological and miss the lag bug | `build_features.py:135-141`, `test_no_leakage.py` | open |
-| C3 | EDA notebook reads the locked-test period | `notebooks/01_eda_and_data_quality.py` | open |
+| C1 | No 24h purge; 600 rows per boundary have targets in the next split | `train.py:35-63` | done |
+| C2 | G2 assertions are tautological and miss the lag bug | `build_features.py:135-141`, `test_no_leakage.py` | done |
+| C3 | EDA notebook reads the locked-test period | `notebooks/01_eda_and_data_quality.py` | done (plots regenerated on pre-test data; the earlier look at the test period is disclosed under F11) |
 | C4 | Calibration season (spring/summer) differs from test season (autumn/winter) | design; addressed by D2 | open |
+| C5 | EDA notebook crashed at the heatmap (`axes.set_ylabel` on an array), so the committed plots could not be regenerated | `notebooks/01_eda_and_data_quality.py:68` | done |
+| C6 | Local scoring picked the last Gate-Val origin, which after purging has a single horizon | `batch_score.py` | done |
+
+Phase C outcome: every split is purged at its boundary and no target hour is shared between splits.
+Locked-test coverage after purging: DE-LU 89.67%, FR 80.00% (Gate-Val: DE-LU 92.25%, FR 87.00%).
 
 ## Phase D: Model and calibration
 

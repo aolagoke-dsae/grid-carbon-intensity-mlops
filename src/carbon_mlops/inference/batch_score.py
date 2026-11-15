@@ -25,11 +25,13 @@ def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
     features_df = build_horizon_features(bronze_df, cfg=cfg, write_output=True)
     artifacts = train_split_cqr(features_df, cfg=cfg)
 
+    # Splits are purged at their boundaries, so the last origins of Gate-Val keep only their
+    # shortest horizons. Use the latest origin per zone that still has every horizon.
     gate_df = artifacts.splits["gate_val"]
-    latest_origins = gate_df.groupby("zone")["origin_timestamp"].transform("max")
-    latest_24h = (
-        gate_df[gate_df["origin_timestamp"] == latest_origins].copy().reset_index(drop=True)
-    )
+    n_horizons = gate_df.groupby(["zone", "origin_timestamp"])["horizon_h"].transform("size")
+    complete = gate_df[n_horizons == len(cfg.horizons)]
+    latest_origins = complete.groupby("zone")["origin_timestamp"].transform("max")
+    latest_24h = complete[complete["origin_timestamp"] == latest_origins].reset_index(drop=True)
 
     preds = artifacts.forecaster.predict(context=None, model_input=latest_24h)
     gold_df = pd.concat([latest_24h, preds], axis=1)

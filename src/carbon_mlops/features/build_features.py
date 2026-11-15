@@ -105,6 +105,50 @@ def _build_zone_origin_features(grid_df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+LAG_HOURS_BY_FEATURE: dict[str, int] = {
+    "carbon_intensity_origin": 0,
+    "ci_lag_1h": 1,
+    "ci_lag_3h": 3,
+    "ci_lag_6h": 6,
+    "ci_lag_24h": 24,
+}
+
+
+def audit_temporal_alignment(zone_features: pd.DataFrame, grid_df: pd.DataFrame) -> None:
+    """Gate G2: re-derive every lag and target by timestamp lookup and compare.
+
+    The features are built with positional shifts and a merge. This audit reads the same
+    values straight from the hourly series by timestamp, so it fails if a lag is not
+    exactly k hours before the origin, if a target is not the value at
+    origin + horizon_h, or if any feature looks past its origin.
+    """
+    series = grid_df.set_index("timestamp_utc")["carbon_intensity_g_kwh"]
+    origin = zone_features["origin_timestamp"]
+
+    for col, lag_h in LAG_HOURS_BY_FEATURE.items():
+        expected = series.reindex(origin - pd.Timedelta(hours=lag_h)).to_numpy()
+        if not np.allclose(zone_features[col].to_numpy(), expected, equal_nan=True):
+            raise AssertionError(f"Gate G2 violation: {col} is not the value at origin-{lag_h}h")
+
+    expected_target_ts = origin + pd.to_timedelta(zone_features["horizon_h"], unit="h")
+    if (zone_features["target_timestamp"] != expected_target_ts).any():
+        raise AssertionError("Gate G2 violation: target_timestamp != origin_timestamp + horizon_h")
+    if (zone_features["target_timestamp"] <= origin).any():
+        raise AssertionError("Gate G2 violation: a target is not strictly after its origin")
+    expected_target = series.reindex(zone_features["target_timestamp"]).to_numpy()
+    actual_target = zone_features["target_carbon_intensity"].to_numpy()
+    if not np.allclose(actual_target, expected_target, equal_nan=True):
+        raise AssertionError("Gate G2 violation: target is not the value at target_timestamp")
+
+    rolling_mean = series.rolling("24h", min_periods=12).mean()
+    expected_roll = rolling_mean.reindex(origin).to_numpy()
+    if not np.allclose(zone_features["ci_roll24_mean"].to_numpy(), expected_roll, equal_nan=True):
+        raise AssertionError("Gate G2 violation: ci_roll24_mean is not the trailing 24h mean")
+
+    if (zone_features["max_feature_timestamp"] > origin).any():
+        raise AssertionError("Gate G2 violation: max_feature_timestamp exceeds origin_timestamp")
+
+
 def build_horizon_features(
     bronze_df: pd.DataFrame,
     cfg: CarbonMLOpsConfig | None = None,
@@ -133,6 +177,7 @@ def build_horizon_features(
             )
         )
 
+        zone_start = len(zone_frames)
         for h in cfg.horizons:
             h_df = origin_df[
                 [
@@ -168,19 +213,13 @@ def build_horizon_features(
             h_df = h_df.merge(target_lookup, on="target_timestamp", how="left")
             zone_frames.append(h_df)
 
+        audit_temporal_alignment(pd.concat(zone_frames[zone_start:], ignore_index=True), grid_df)
+
     features_df = (
         pd.concat(zone_frames, ignore_index=True)
         .sort_values(["zone", "origin_timestamp", "horizon_h"])
         .reset_index(drop=True)
     )
-
-    if (features_df["max_feature_timestamp"] > features_df["origin_timestamp"]).any():
-        raise AssertionError("Gate G2 violation: max_feature_timestamp exceeds origin_timestamp")
-    expected_target = features_df["origin_timestamp"] + pd.to_timedelta(
-        features_df["horizon_h"], unit="h"
-    )
-    if (features_df["target_timestamp"] != expected_target).any():
-        raise AssertionError("Gate G2 violation: target_timestamp != origin_timestamp + horizon_h")
 
     if write_output:
         table_name = f"{cfg.schema}.grid_horizon_features"
