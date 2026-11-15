@@ -25,18 +25,26 @@ def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
     features_df = build_horizon_features(bronze_df, cfg=cfg, write_output=True)
     artifacts = train_split_cqr(features_df, cfg=cfg)
 
-    # Splits are purged at their boundaries, so the last origins of Gate-Val keep only their
-    # shortest horizons. Use the latest origin per zone that still has every horizon.
-    gate_df = artifacts.splits["gate_val"]
-    n_horizons = gate_df.groupby(["zone", "origin_timestamp"])["horizon_h"].transform("size")
-    complete = gate_df[n_horizons == len(cfg.horizons)]
+    # Show the latest Gate-Val origin that still has every horizon (splits are purged at their
+    # boundaries). Its forecast comes from the walk-forward replay, so it was calibrated
+    # only on errors observed before that origin: an out-of-sample picture.
+    gate_preds = artifacts.gate_val_predictions
+    n_horizons = gate_preds.groupby(["zone", "origin_timestamp"])["horizon_h"].transform("size")
+    complete = gate_preds[n_horizons == len(cfg.horizons)]
     latest_origins = complete.groupby("zone")["origin_timestamp"].transform("max")
-    latest_24h = complete[complete["origin_timestamp"] == latest_origins].reset_index(drop=True)
+    gold_df = (
+        complete[complete["origin_timestamp"] == latest_origins]
+        .drop(columns=["low_score", "high_score"])
+        .sort_values(["zone", "horizon_h"])
+        .reset_index(drop=True)
+    )
 
-    preds = artifacts.forecaster.predict(context=None, model_input=latest_24h)
-    gold_df = pd.concat([latest_24h, preds], axis=1)
-
-    write_table(gold_df, table_name=f"{cfg.schema}.gold_forecasts", mode="overwrite")
+    write_table(
+        gold_df,
+        table_name=f"{cfg.schema}.gold_forecasts",
+        mode="overwrite",
+        base_dir=cfg.local_data_dir,
+    )
 
     cfg.dashboard_data_dir.mkdir(parents=True, exist_ok=True)
     csv_out = cfg.dashboard_data_dir / "latest_24h_forecasts.csv"
@@ -74,7 +82,7 @@ def run_databricks_batch_scoring(cfg: CarbonMLOpsConfig | None = None) -> str:
     latest_ts = sdf.agg(F.max("origin_timestamp")).collect()
     latest_sdf = sdf.filter(F.col("origin_timestamp") == latest_ts)
 
-    udf_cols = ["zone", "horizon_bucket", *CAUSAL_FEATURE_COLS]
+    udf_cols = ["zone", *CAUSAL_FEATURE_COLS]
     cast_exprs = [
         F.col(c).cast("double").alias(c)
         if c in ("horizon_h", "target_dow", "target_month", "is_weekend")

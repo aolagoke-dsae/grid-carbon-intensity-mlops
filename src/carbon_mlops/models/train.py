@@ -1,4 +1,4 @@
-"""Chronological 4-way split training, Asymmetric Split CQR, and MLflow Registry logging."""
+"""Chronological 4-way split training, per-horizon rolling Split CQR, and MLflow logging."""
 
 from __future__ import annotations
 
@@ -16,18 +16,37 @@ from mlflow.tracking import MlflowClient
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS
 from carbon_mlops.io.store import is_databricks_runtime
+from carbon_mlops.models.conformal import (
+    add_conformity_scores,
+    calibrate_offsets,
+    select_calibration_window,
+    walk_forward_calibrated_predictions,
+)
 from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
 
 logger = logging.getLogger(__name__)
 
 
+QUANTILE_LEVELS: dict[str, float] = {"q05": 0.05, "q50": 0.50, "q95": 0.95}
+
+# Chosen on Gate-Val only (walk-forward pinball loss and coverage), within the 15 s
+# local-run budget. See docs/REVIEW_ISSUES.md, Phase D.
+DEFAULT_LGBM_PARAMS: dict[str, float | int] = {
+    "n_estimators": 200,
+    "learning_rate": 0.045,
+    "num_leaves": 31,
+    "min_child_samples": 100,
+}
+
+
 @dataclass
 class TrainingArtifacts:
-    """Container holding trained CQR forecaster, splits, Gate-Val metrics, and MLflow run info."""
+    """Trained forecaster, splits, Gate-Val walk-forward predictions/metrics, and MLflow info."""
 
     forecaster: ConformalCarbonForecaster
     splits: dict[str, pd.DataFrame]
     gate_val_metrics: dict[str, float]
+    gate_val_predictions: pd.DataFrame
     run_id: str | None = None
     model_version: str | None = None
 
@@ -98,115 +117,158 @@ def pinball_loss(y_true: np.ndarray, y_pred: np.ndarray, alpha: float) -> float:
     return float(np.mean(np.maximum(alpha * diff, (alpha - 1.0) * diff)))
 
 
-def _compute_gate_val_metrics(
-    forecaster: ConformalCarbonForecaster,
-    gate_df: pd.DataFrame,
+def _zone_key(zone: str) -> str:
+    return zone.lower().replace("-", "_")
+
+
+def compute_interval_metrics(
+    preds_df: pd.DataFrame,
     cfg: CarbonMLOpsConfig,
+    prefix: str = "gate_val",
 ) -> dict[str, float]:
-    """Evaluate Gate-Val coverage (overall & per-zone) and quantile pinball losses."""
-    gate_preds = forecaster.predict(context=None, model_input=gate_df)
-    y_gate = gate_df["target_carbon_intensity"].to_numpy()
-    covered = (y_gate >= gate_preds["p05"].to_numpy()) & (y_gate <= gate_preds["p95"].to_numpy())
+    """Coverage, width and pinball loss of calibrated predictions, pooled and per zone.
+
+    Per zone it also reports the worst per-horizon coverage and the pinball loss of the
+    persistence forecast (the origin intensity), the baseline the median must beat.
+    """
+    y = preds_df["target_carbon_intensity"].to_numpy()
+    p05, p50, p95 = (preds_df[c].to_numpy() for c in ("p05", "p50", "p95"))
+    covered = (y >= p05) & (y <= p95)
 
     metrics: dict[str, float] = {
-        "gate_val_coverage": float(np.mean(covered)),
-        "gate_val_mean_width": float(gate_preds["interval_width"].mean()),
-        "gate_val_pinball_p05": pinball_loss(y_gate, gate_preds["p05"].to_numpy(), 0.05),
-        "gate_val_pinball_p50": pinball_loss(y_gate, gate_preds["p50"].to_numpy(), 0.50),
-        "gate_val_pinball_p95": pinball_loss(y_gate, gate_preds["p95"].to_numpy(), 0.95),
+        f"{prefix}_coverage": float(np.mean(covered)),
+        f"{prefix}_mean_width": float(np.mean(p95 - p05)),
+        f"{prefix}_pinball_p05": pinball_loss(y, p05, 0.05),
+        f"{prefix}_pinball_p50": pinball_loss(y, p50, 0.50),
+        f"{prefix}_pinball_p95": pinball_loss(y, p95, 0.95),
     }
-    metrics["gate_val_mean_pinball"] = float(
-        np.mean(
-            [
-                metrics["gate_val_pinball_p05"],
-                metrics["gate_val_pinball_p50"],
-                metrics["gate_val_pinball_p95"],
-            ]
-        )
+    metrics[f"{prefix}_mean_pinball"] = float(
+        np.mean([metrics[f"{prefix}_pinball_{q}"] for q in ("p05", "p50", "p95")])
     )
 
+    persistence = preds_df["carbon_intensity_origin"].to_numpy()
+    horizons = preds_df["horizon_h"].to_numpy()
     for zone in cfg.zones:
-        z_mask = (gate_df["zone"] == zone).to_numpy()
-        if z_mask.any():
-            z_key = zone.lower().replace("-", "_")
-            metrics[f"gate_val_coverage_{z_key}"] = float(np.mean(covered[z_mask]))
-            metrics[f"gate_val_width_{z_key}"] = float(
-                gate_preds.loc[z_mask, "interval_width"].mean()
+        z_mask = (preds_df["zone"] == zone).to_numpy()
+        if not z_mask.any():
+            continue
+        key = _zone_key(zone)
+        y_z, p05_z, p50_z, p95_z = y[z_mask], p05[z_mask], p50[z_mask], p95[z_mask]
+        metrics[f"{prefix}_coverage_{key}"] = float(np.mean(covered[z_mask]))
+        metrics[f"{prefix}_width_{key}"] = float(np.mean(p95_z - p05_z))
+        per_horizon = pd.Series(covered[z_mask]).groupby(horizons[z_mask]).mean()
+        metrics[f"{prefix}_min_horizon_coverage_{key}"] = float(per_horizon.min())
+        metrics[f"{prefix}_mean_pinball_{key}"] = float(
+            np.mean(
+                [
+                    pinball_loss(y_z, p05_z, 0.05),
+                    pinball_loss(y_z, p50_z, 0.50),
+                    pinball_loss(y_z, p95_z, 0.95),
+                ]
             )
+        )
+        metrics[f"{prefix}_pinball_p50_{key}"] = pinball_loss(y_z, p50_z, 0.50)
+        metrics[f"{prefix}_persistence_pinball_p50_{key}"] = pinball_loss(
+            y_z, persistence[z_mask], 0.50
+        )
     return metrics
+
+
+def fit_quantile_models(
+    train_df: pd.DataFrame,
+    cfg: CarbonMLOpsConfig,
+    lgbm_params: dict[str, float | int],
+) -> dict[str, dict[str, lgb.LGBMRegressor]]:
+    """Fit one LightGBM quantile regressor per zone and quantile level on the Train split."""
+    models_by_zone: dict[str, dict[str, lgb.LGBMRegressor]] = {}
+    for zone in cfg.zones:
+        z_train = train_df[train_df["zone"] == zone]
+        x_tr = z_train[list(CAUSAL_FEATURE_COLS)]
+        y_tr = z_train["target_carbon_intensity"].to_numpy()
+        if cfg.target_mode == "delta":
+            y_tr = y_tr - z_train["carbon_intensity_origin"].to_numpy()
+
+        z_models: dict[str, lgb.LGBMRegressor] = {}
+        for key, alpha in QUANTILE_LEVELS.items():
+            reg = lgb.LGBMRegressor(
+                objective="quantile",
+                alpha=alpha,
+                subsample_for_bin=20000,
+                random_state=42,
+                n_jobs=-1,
+                verbose=-1,
+                **lgbm_params,
+            )
+            reg.fit(x_tr, y_tr)
+            z_models[key] = reg
+        models_by_zone[zone] = z_models
+    return models_by_zone
+
+
+def recalibrate_forecaster(
+    forecaster: ConformalCarbonForecaster,
+    labelled_df: pd.DataFrame,
+    as_of: pd.Timestamp,
+    cfg: CarbonMLOpsConfig | None = None,
+) -> ConformalCarbonForecaster:
+    """Return the forecaster with offsets recomputed from the window that ends at `as_of`.
+
+    This is the scheduled recalibration step: the base models are untouched, only the
+    conformal offsets move, and only targets observed before `as_of` are used.
+    """
+    cfg = cfg or CarbonMLOpsConfig()
+    scored = add_conformity_scores(forecaster, labelled_df)
+    window = select_calibration_window(scored, as_of, cfg.recalibration_window_days)
+    offsets = calibrate_offsets(window, cfg.nominal_coverage)
+    return forecaster.with_offsets(offsets, calibrated_through=str(as_of))
 
 
 def train_split_cqr(
     features_df: pd.DataFrame,
     cfg: CarbonMLOpsConfig | None = None,
-    n_estimators: int = 120,
+    n_estimators: int | None = None,
     register_mlflow: bool = False,
     tracking_uri: str | None = None,
 ) -> TrainingArtifacts:
-    """Fit per-zone LightGBM quantile models, calibrate two-sided Split CQR, and log to MLflow."""
+    """Fit base quantile models, evaluate the recalibration schedule on Gate-Val, log to MLflow.
+
+    Gate-Val metrics come from a walk-forward replay: offsets are recomputed every
+    `recalibration_step_days` from the trailing window (which starts inside Calib) and
+    applied to the following origins, exactly as in operation. The returned forecaster
+    carries the offsets of the last recalibration before the Locked Test begins.
+    """
     cfg = cfg or CarbonMLOpsConfig()
+    lgbm_params = dict(DEFAULT_LGBM_PARAMS)
+    if n_estimators is not None:
+        lgbm_params["n_estimators"] = n_estimators
+
     splits = chronological_four_way_split(features_df, cfg=cfg)
-    train_df = splits["train"]
-    calib_df = splits["calib"]
     gate_df = splits["gate_val"]
 
-    models_by_zone: dict[str, dict[str, lgb.LGBMRegressor]] = {}
-    quantile_keys = {"q05": 0.05, "q50": 0.50, "q95": 0.95}
-
-    for zone in cfg.zones:
-        z_train = train_df[train_df["zone"] == zone]
-        x_tr = z_train[list(CAUSAL_FEATURE_COLS)]
-        y_tr = z_train["target_carbon_intensity"].to_numpy()
-
-        z_models: dict[str, lgb.LGBMRegressor] = {}
-        for key, alpha in quantile_keys.items():
-            reg = lgb.LGBMRegressor(
-                objective="quantile",
-                alpha=alpha,
-                n_estimators=n_estimators,
-                learning_rate=0.06,
-                num_leaves=31,
-                subsample_for_bin=20000,
-                random_state=42,
-                n_jobs=-1,
-                verbose=-1,
-            )
-            reg.fit(x_tr, y_tr)
-            z_models[key] = reg
-        models_by_zone[zone] = z_models
-
-    conformal_offsets: dict[tuple[str, str], tuple[float, float]] = {}
-    tail_alpha = (1.0 - cfg.nominal_coverage) / 2.0
-
-    for zone in cfg.zones:
-        z_cal = calib_df[calib_df["zone"] == zone]
-        x_cal = z_cal[list(CAUSAL_FEATURE_COLS)]
-        q05_cal = models_by_zone[zone]["q05"].predict(x_cal)
-        q95_cal = models_by_zone[zone]["q95"].predict(x_cal)
-        y_cal = z_cal["target_carbon_intensity"].to_numpy()
-
-        low_scores = q05_cal - y_cal
-        high_scores = y_cal - q95_cal
-
-        for bucket in cfg.horizon_buckets:
-            mask = (z_cal["horizon_bucket"] == bucket).to_numpy()
-            lo_b = low_scores[mask]
-            hi_b = high_scores[mask]
-            n_b = len(lo_b)
-            if n_b == 0:
-                conformal_offsets[(zone, bucket)] = (0.0, 0.0)
-                continue
-            q_level = min(1.0, np.ceil((n_b + 1) * (1.0 - tail_alpha)) / n_b)
-            q_lo = float(np.quantile(lo_b, q_level, method="higher"))
-            q_hi = float(np.quantile(hi_b, q_level, method="higher"))
-            conformal_offsets[(zone, bucket)] = (q_lo, q_hi)
-
-    forecaster = ConformalCarbonForecaster(
-        models_by_zone=models_by_zone,
-        conformal_offsets=conformal_offsets,
+    models_by_zone = fit_quantile_models(splits["train"], cfg, lgbm_params)
+    uncalibrated = ConformalCarbonForecaster(
+        models_by_zone=models_by_zone, conformal_offsets={}, target_mode=cfg.target_mode
     )
-    metrics = _compute_gate_val_metrics(forecaster, gate_df, cfg)
-    logger.info("Gate-Val Asymmetric CQR metrics: %s", metrics)
+
+    history = pd.concat([splits["calib"], gate_df], ignore_index=True)
+    scored = add_conformity_scores(uncalibrated, history)
+    gate_preds = walk_forward_calibrated_predictions(
+        scored,
+        eval_start=gate_df["origin_timestamp"].min(),
+        eval_end=gate_df["origin_timestamp"].max(),
+        cfg=cfg,
+    )
+    metrics = compute_interval_metrics(gate_preds, cfg, prefix="gate_val")
+    logger.info("Gate-Val walk-forward CQR metrics: %s", metrics)
+
+    calibrated_through = gate_df["target_timestamp"].max() + pd.Timedelta(hours=1)
+    final_window = select_calibration_window(
+        scored, as_of=calibrated_through, window_days=cfg.recalibration_window_days
+    )
+    forecaster = uncalibrated.with_offsets(
+        calibrate_offsets(final_window, cfg.nominal_coverage),
+        calibrated_through=str(calibrated_through),
+    )
 
     run_id: str | None = None
     model_version: str | None = None
@@ -224,7 +286,7 @@ def train_split_cqr(
             model_name = "conformal_carbon_forecaster"
 
         sample_in = (
-            gate_df[["zone", "horizon_bucket", *CAUSAL_FEATURE_COLS]]
+            gate_df[["zone", *CAUSAL_FEATURE_COLS]]
             .head(10)
             .astype(
                 {
@@ -242,9 +304,13 @@ def train_split_cqr(
             run_id = run.info.run_id
             mlflow.log_params(
                 {
-                    "n_estimators": n_estimators,
+                    **lgbm_params,
                     "nominal_coverage": cfg.nominal_coverage,
-                    "cqr_mode": "asymmetric_two_sided",
+                    "cqr_mode": "asymmetric_two_sided_per_horizon",
+                    "target_mode": cfg.target_mode,
+                    "recalibration_window_days": cfg.recalibration_window_days,
+                    "recalibration_step_days": cfg.recalibration_step_days,
+                    "calibrated_through": str(calibrated_through),
                     "zones": ",".join(cfg.zones),
                 }
             )
@@ -272,6 +338,7 @@ def train_split_cqr(
         forecaster=forecaster,
         splits=splits,
         gate_val_metrics=metrics,
+        gate_val_predictions=gate_preds,
         run_id=run_id,
         model_version=model_version,
     )

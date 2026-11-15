@@ -1,4 +1,4 @@
-"""Custom MLflow PyFunc wrapper enforcing Asymmetric Split CQR & Serverless requirements."""
+"""Custom MLflow PyFunc wrapper enforcing per-horizon Split CQR & Serverless requirements."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS
 
 logger = logging.getLogger(__name__)
+
+TARGET_MODES: tuple[str, ...] = ("delta", "level")
 
 
 def enforce_cqr_invariants(
@@ -31,30 +33,77 @@ def enforce_cqr_invariants(
     return stacked[:, 0], stacked[:, 1], stacked[:, 2]
 
 
+def _offset_key(zone: str, horizon_h: int) -> str:
+    """String key (pickle- and JSON-friendly) of one (zone, horizon) calibration cell."""
+    return f"{zone}|{int(horizon_h)}"
+
+
 class ConformalCarbonForecaster(mlflow.pyfunc.PythonModel):
-    """MLflow PythonModel wrapping per-zone LightGBM quantile models + two-sided CQR offsets."""
+    """Per-zone LightGBM quantile models plus per-(zone, horizon_h) two-sided CQR offsets.
+
+    target_mode "delta" means the base models predict the change from the origin intensity,
+    so persistence is the zero prediction; "level" means they predict the intensity itself.
+    Offsets are keyed by horizon_h taken from the input row, never by a caller-supplied
+    bucket label, and a row without a matching offset is an error, not a silent fallback.
+    """
 
     def __init__(
         self,
         models_by_zone: dict[str, dict[str, Any]],
-        conformal_offsets: dict[tuple[str, str], tuple[float, float] | float],
+        conformal_offsets: dict[tuple[str, int], tuple[float, float]],
         feature_cols: tuple[str, ...] = CAUSAL_FEATURE_COLS,
         pip_requirements: tuple[str, ...] | None = None,
+        target_mode: str = "delta",
+        calibrated_through: str | None = None,
     ) -> None:
-        cfg = CarbonMLOpsConfig()
+        if target_mode not in TARGET_MODES:
+            raise ValueError(f"target_mode must be one of {TARGET_MODES}, got {target_mode!r}")
         self.models_by_zone = models_by_zone
-        normalized: dict[str, tuple[float, float]] = {}
-        for (z, b), val in conformal_offsets.items():
-            if isinstance(val, (tuple, list)):
-                lo, hi = val
-                normalized[f"{z}|{b}"] = (float(lo), float(hi))
-            else:
-                lo, hi = val
-                normalized[f"{z}|{b}"] = (float(lo), float(hi))
-        self.conformal_offsets = normalized
+        self.conformal_offsets: dict[str, tuple[float, float]] = {
+            _offset_key(zone, horizon_h): (float(lo), float(hi))
+            for (zone, horizon_h), (lo, hi) in conformal_offsets.items()
+        }
         self.feature_cols = list(feature_cols)
-        self.pip_requirements = list(pip_requirements or cfg.udf_pip_requirements)
-        self._cfg = cfg
+        self.pip_requirements = list(
+            pip_requirements or CarbonMLOpsConfig().udf_pip_requirements
+        )
+        self.target_mode = target_mode
+        self.calibrated_through = calibrated_through
+
+    def with_offsets(
+        self,
+        conformal_offsets: dict[tuple[str, int], tuple[float, float]],
+        calibrated_through: str | None = None,
+    ) -> ConformalCarbonForecaster:
+        """Return a forecaster sharing the fitted base models but carrying new offsets."""
+        return ConformalCarbonForecaster(
+            models_by_zone=self.models_by_zone,
+            conformal_offsets=conformal_offsets,
+            feature_cols=tuple(self.feature_cols),
+            pip_requirements=tuple(self.pip_requirements),
+            target_mode=self.target_mode,
+            calibrated_through=calibrated_through,
+        )
+
+    def predict_raw_quantiles(self, model_input: pd.DataFrame) -> pd.DataFrame:
+        """Return uncalibrated level-scale quantiles (raw_q05, raw_q50, raw_q95) per row."""
+        out = pd.DataFrame(
+            index=model_input.index, columns=["raw_q05", "raw_q50", "raw_q95"], dtype=float
+        )
+        for zone, grp in model_input.groupby("zone", sort=False):
+            if zone not in self.models_by_zone:
+                raise ValueError(f"Unsupported zone in inference input: {zone}")
+            z_models = self.models_by_zone[zone]
+            x_mat = grp[self.feature_cols]
+            base = (
+                grp["carbon_intensity_origin"].to_numpy(dtype=float)
+                if self.target_mode == "delta"
+                else 0.0
+            )
+            for key in ("q05", "q50", "q95"):
+                pred = np.asarray(z_models[key].predict(x_mat), dtype=float)
+                out.loc[grp.index, f"raw_{key}"] = pred + base
+        return out
 
     def predict(
         self,
@@ -66,32 +115,24 @@ class ConformalCarbonForecaster(mlflow.pyfunc.PythonModel):
         if model_input.empty:
             return pd.DataFrame(columns=["p05", "p50", "p95", "interval_width"])
 
-        out = pd.DataFrame(index=model_input.index, columns=["p05", "p50", "p95"], dtype=float)
+        raw = self.predict_raw_quantiles(model_input)
+        keys = [
+            _offset_key(zone, horizon_h)
+            for zone, horizon_h in zip(model_input["zone"], model_input["horizon_h"], strict=True)
+        ]
+        missing = sorted({k for k in keys if k not in self.conformal_offsets})
+        if missing:
+            raise ValueError(f"No conformal offsets for zone|horizon_h: {missing[:5]}")
+        q_low = np.array([self.conformal_offsets[k][0] for k in keys], dtype=float)
+        q_high = np.array([self.conformal_offsets[k][1] for k in keys], dtype=float)
 
-        for zone, grp in model_input.groupby("zone", sort=False):
-            if zone not in self.models_by_zone:
-                raise ValueError(f"Unsupported zone in inference input: {zone}")
-
-            z_models = self.models_by_zone[zone]
-            x_mat = grp[self.feature_cols]
-
-            raw_p05 = np.asarray(z_models["q05"].predict(x_mat), dtype=float)
-            raw_p50 = np.asarray(z_models["q50"].predict(x_mat), dtype=float)
-            raw_p95 = np.asarray(z_models["q95"].predict(x_mat), dtype=float)
-
-            buckets = (
-                grp["horizon_bucket"]
-                if "horizon_bucket" in grp.columns
-                else grp["horizon_h"].map(self._cfg.bucket_for_horizon)
-            )
-            pairs = [self.conformal_offsets.get(f"{zone}|{b}", (0.0, 0.0)) for b in buckets]
-            q_low = np.array([lo for lo, _ in pairs], dtype=float)
-            q_high = np.array([hi for _, hi in pairs], dtype=float)
-
-            p05, p50, p95 = enforce_cqr_invariants(raw_p05, raw_p50, raw_p95, q_low, q_high)
-            out.loc[grp.index, "p05"] = p05
-            out.loc[grp.index, "p50"] = p50
-            out.loc[grp.index, "p95"] = p95
-
+        p05, p50, p95 = enforce_cqr_invariants(
+            raw["raw_q05"].to_numpy(dtype=float),
+            raw["raw_q50"].to_numpy(dtype=float),
+            raw["raw_q95"].to_numpy(dtype=float),
+            q_low,
+            q_high,
+        )
+        out = pd.DataFrame({"p05": p05, "p50": p50, "p95": p95}, index=model_input.index)
         out["interval_width"] = out["p95"] - out["p05"]
         return out

@@ -24,6 +24,17 @@ class CarbonMLOpsConfig:
     nominal_coverage: float = 0.90
     coverage_bounds: tuple[float, float] = (0.87, 0.96)
 
+    # Base-model target: "delta" predicts the change from the origin intensity, so persistence
+    # is the zero prediction; "level" predicts the intensity itself.
+    target_mode: str = "delta"
+
+    # Scheduled recalibration of the conformal offsets. Every `recalibration_step_days` the
+    # per-(zone, horizon_h) offsets are recomputed from the trailing
+    # `recalibration_window_days` of realized errors. Window chosen on Gate-Val only
+    # (candidates 30/45/60/90 days; rule: smallest worst-zone gap from nominal coverage).
+    recalibration_window_days: int = 30
+    recalibration_step_days: int = 7
+
     # 4-way chronological split ratios (Train / Calib / Gate-Val / Locked Test)
     split_ratios: tuple[float, float, float, float] = (0.60, 0.15, 0.10, 0.15)
 
