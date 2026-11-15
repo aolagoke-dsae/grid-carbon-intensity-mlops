@@ -17,3 +17,6 @@ dist/
 !dashboards/data/
 
 data/lakehouse_local/
+
+# Local review bundle (derived dump of the repo)
+_repo_review_bundle.txt

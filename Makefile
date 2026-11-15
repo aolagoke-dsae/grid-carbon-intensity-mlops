@@ -1,11 +1,11 @@
-﻿.PHONY: test run-local deploy
+.PHONY: test run-local deploy
 
 test:
-ruff check src tests
-pytest -v
+	ruff check src tests notebooks
+	pytest -v
 
 run-local:
-python -m carbon_mlops.inference.batch_score --mode local
+	python -m carbon_mlops.inference.batch_score --mode local
 
 deploy:
-databricks bundle deploy -t dev
+	databricks bundle deploy -t dev
