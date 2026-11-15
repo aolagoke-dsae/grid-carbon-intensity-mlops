@@ -1,10 +1,10 @@
 # Databricks Verification Checklist (Phase G)
 
 **Status (2026-11-15): all 12 steps have been run on the Free Edition workspace.** Eleven pass; step 6
-shows a small numerical difference from the local run. Both jobs run end to end, and the gate has now
-been exercised both without and with an existing champion. Still open: the model-version tags were
-not confirmed because the CLI does not return them; the registry currently has version 3 as champion,
-which is calibrated only through Gate-Val until the inference job is run again.
+shows a small numerical difference from the local run. Both jobs run end to end, the gate has been
+exercised without and with an existing champion, and the registry is in its intended operating
+state: champion is version 4, recalibrated through 2025-12-31. Still open: the model-version tags were
+not confirmed, because the CLI does not return them.
 
 ## What was verified locally, and what that does and does not show
 
@@ -177,11 +177,32 @@ What this shows:
   against the champion is exactly 1.0. So the difference from the local run (G16) is between
   platforms, not run-to-run noise.
 
-State of the registry after this run: versions 1, 2 and 3 are `READY`; `challenger` and `champion`
-both point to version 3. Version 3 carries offsets calibrated through the end of Gate-Val
-(September). Version 2, recalibrated through 2025-12-31, is no longer champion. The inference job
-recalibrates before it scores, so running it again produces a current champion (version 4); until
-then the champion alias points at a model with older offsets than version 2.
+State of the registry after this run: versions 1, 2 and 3 were `READY`, with `challenger` and
+`champion` both on version 3, whose offsets are calibrated through the end of Gate-Val (September).
+The inference job was therefore run again; see the next entry.
+
+### 2026-11-15, second inference run (run `424886171434319`)
+
+| Task | Result |
+| :--- | :--- |
+| `recalibrate_champion` | SUCCESS, 59 s; "Recalibrated ... v3 -> v4 through 2025-12-31 23:00:00" |
+| `spark_udf_batch_score` | SUCCESS, 55 s; scored 48 rows and rewrote the extract |
+
+Checked afterwards: `champion` is version 4 and `challenger` is version 3; four versions are `READY`.
+The Gold table again holds 24 rows per zone for origin 2025-12-31 22:00 UTC with no ordering
+violations or nulls, and its values equal those of the first inference run (for example DE-LU at 1 h:
+245.7 / 283.8 / 297.8; FR at 24 h: 22.6 / 42.1 / 69.0). That is the expected result: versions 2 and 4
+share identical base models and were recalibrated on the same window. The extract in the volume was
+rewritten (same size, new timestamp).
+
+Final registry state:
+
+| Version | How it was produced | Calibrated through | Alias |
+| :--- | :--- | :--- | :--- |
+| 1 | First training run | end of Gate-Val | |
+| 2 | Recalibration of version 1 | 2025-12-31 23:00 UTC | |
+| 3 | Second training run, promoted on a tie | end of Gate-Val | `challenger` |
+| 4 | Recalibration of version 3 | 2025-12-31 23:00 UTC | `champion` |
 
 ### Still unverified after these runs
 

@@ -282,8 +282,10 @@ Run time of the test suite is now 11–13 s against the 15 s standard (47 tests)
 
 Phase G state (2026-11-15). **Both jobs run end to end on the Free Edition workspace.** Steps 1 to 11
 of `docs/DATABRICKS_VERIFICATION.md` pass; training run `293770853415496`, inference run
-`807621109176368`. Step 12 passes as run `617140816488603`. Not yet `done`: the model-version tags are unconfirmed,
-G16 (small cross-platform numerical difference) is open, and CI has not been confirmed on these commits.
+`807621109176368`. Step 12 passes as run `617140816488603`, and a second inference run (`424886171434319`) left the
+registry in its operating state: champion is version 4, recalibrated through 2025-12-31.
+Not yet `done`: the model-version tags are unconfirmed, G16 (small cross-platform numerical
+difference) is open, and CI has not been confirmed on these commits.
 
 What changed:
 
