@@ -223,6 +223,35 @@ def recalibrate_forecaster(
     return forecaster.with_offsets(offsets, calibrated_through=str(as_of))
 
 
+def evaluate_on_gate_val(
+    forecaster: ConformalCarbonForecaster,
+    splits: dict[str, pd.DataFrame],
+    cfg: CarbonMLOpsConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Replay the recalibration schedule over Gate-Val with a forecaster's base models.
+
+    Returns (scored history, walk-forward Gate-Val predictions). Only the forecaster's
+    base models are used; its stored offsets are ignored, because offsets are recomputed
+    inside the replay from errors observed before each origin. Training and the promotion
+    gate both call this, so a challenger and a champion are always judged the same way.
+    """
+    gate_df = splits["gate_val"]
+    # Only Calib origins inside the first trailing window can ever be used for calibration,
+    # so older Calib rows are not scored. This changes no result, only the run time.
+    gate_start = gate_df["origin_timestamp"].min()
+    window_start = gate_start - pd.Timedelta(days=cfg.recalibration_window_days)
+    recent_calib = splits["calib"][splits["calib"]["origin_timestamp"] >= window_start]
+    history = pd.concat([recent_calib, gate_df], ignore_index=True)
+    scored = add_conformity_scores(forecaster, history)
+    gate_preds = walk_forward_calibrated_predictions(
+        scored,
+        eval_start=gate_start,
+        eval_end=gate_df["origin_timestamp"].max(),
+        cfg=cfg,
+    )
+    return scored, gate_preds
+
+
 def train_split_cqr(
     features_df: pd.DataFrame,
     cfg: CarbonMLOpsConfig | None = None,
@@ -250,19 +279,7 @@ def train_split_cqr(
         models_by_zone=models_by_zone, conformal_offsets={}, target_mode=cfg.target_mode
     )
 
-    # Only Calib origins inside the first trailing window can ever be used for calibration,
-    # so older Calib rows are not scored. This changes no result, only the run time.
-    gate_start = gate_df["origin_timestamp"].min()
-    window_start = gate_start - pd.Timedelta(days=cfg.recalibration_window_days)
-    recent_calib = splits["calib"][splits["calib"]["origin_timestamp"] >= window_start]
-    history = pd.concat([recent_calib, gate_df], ignore_index=True)
-    scored = add_conformity_scores(uncalibrated, history)
-    gate_preds = walk_forward_calibrated_predictions(
-        scored,
-        eval_start=gate_df["origin_timestamp"].min(),
-        eval_end=gate_df["origin_timestamp"].max(),
-        cfg=cfg,
-    )
+    scored, gate_preds = evaluate_on_gate_val(uncalibrated, splits, cfg)
     metrics = compute_interval_metrics(gate_preds, cfg, prefix="gate_val")
     logger.info("Gate-Val walk-forward CQR metrics: %s", metrics)
 

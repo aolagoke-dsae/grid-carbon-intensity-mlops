@@ -42,7 +42,7 @@ This plan organizes delivery into **four 1-week Sprints**. Every Sprint delivers
 * **US-2.1 — Unity Catalog Feature Store Materialization:**
   * *Story:* As an ML engineer, I want `build_features.py` to register `grid_horizon_features` via `FeatureEngineeringClient` with composite primary keys `["zone", "origin_timestamp", "horizon_h"]`.
 * **US-2.2 — Model Registry & Automated `@champion` Gate (`Gate G3`):**
-  * *Story:* As a model owner, I want `train.py` to register `ConformalCarbonForecaster` (with pinned `pip_requirements` for Serverless compatibility) as `@challenger` in Unity Catalog while logging Gate-Val metrics to the MLflow Run, and `evaluate_gate.py` to promote `@champion` only when **Gate-Val** coverage in `[0.87, 0.96]` and pinball loss improves/ties (keeping Locked Test untouched).
+  * *Story:* As a model owner, I want `train.py` to register `ConformalCarbonForecaster` (with pinned `pip_requirements` for Serverless compatibility) as `@challenger` in Unity Catalog while logging Gate-Val metrics to the MLflow Run, and `evaluate_gate.py` to promote `@champion` only when **Gate-Val** coverage is in `[0.87, 0.96]` in every zone, the median beats persistence in every zone and horizon bucket, and the scale-free pinball ratio versus `@champion` improves/ties, with both models re-scored by the gate on the same window (keeping Locked Test untouched).
 * **US-2.3 — Distributed Batch Scoring, DAB & GitHub Actions:**
   * *Story:* As a platform engineer, I want `batch_score.py` (`mlflow.pyfunc.spark_udf` -> `gold_forecasts` + batch CSV extract `dashboards/data/latest_24h_forecasts.csv`), `databricks.yml`, and `.github/workflows/ci_cd.yml` automated.
 

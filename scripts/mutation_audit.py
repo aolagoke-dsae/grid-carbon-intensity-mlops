@@ -32,6 +32,7 @@ CONFIG = "src/carbon_mlops/config.py"
 TRAIN = "src/carbon_mlops/models/train.py"
 CONFORMAL = "src/carbon_mlops/models/conformal.py"
 WRAPPER = "src/carbon_mlops/models/pyfunc_wrapper.py"
+GATE = "src/carbon_mlops/models/evaluate_gate.py"
 
 COPIED_PATHS: tuple[str, ...] = ("src", "tests", "data/bronze_snapshot")
 COPIED_FILES: tuple[str, ...] = ("pyproject.toml",)
@@ -260,6 +261,65 @@ MUTATIONS: tuple[Mutation, ...] = (
         "metrics = compute_interval_metrics(\n"
         '        gate_preds.assign(p05=0.0, p95=1e9), cfg, prefix="gate_val"\n'
         "    )",
+    ),
+    Mutation(
+        "E1",
+        "per-zone coverage bounds not enforced",
+        GATE,
+        "if not (low <= cov <= high):",
+        "if False:",
+    ),
+    Mutation(
+        "E1",
+        "gate coverage ignores the upper interval bound",
+        GATE,
+        "covered = (y >= p05) & (y <= p95)",
+        "covered = y >= p05",
+    ),
+    Mutation(
+        "E3",
+        "persistence check not enforced",
+        GATE,
+        "for cell in challenger.cells_losing_to_persistence:",
+        "for cell in ():",
+    ),
+    Mutation(
+        "E3",
+        "persistence comparison inverted",
+        GATE,
+        "if model_loss >= baseline_loss:",
+        "if model_loss < baseline_loss:",
+    ),
+    Mutation(
+        "E2",
+        "champion is not re-scored on the challenger's window",
+        GATE,
+        "if champion_mv is not None and champion_version != challenger_version:",
+        "if False:",
+    ),
+    Mutation(
+        "E2",
+        "pinball comparison against the champion not enforced",
+        GATE,
+        "if ratio > 1.0:",
+        "if False:",
+    ),
+    Mutation(
+        "E2",
+        "pinball comparison pooled across zones instead of scale-free",
+        GATE,
+        "return float(np.mean(ratios))",
+        "return float(\n"
+        "        sum(challenger.mean_pinball_by_zone.values())\n"
+        "        / sum(champion.mean_pinball_by_zone.values())\n"
+        "    )",
+    ),
+    Mutation(
+        "E4",
+        "challenger promoted despite failed checks",
+        GATE,
+        "promoted = not failed",
+        "promoted = True",
     ),
 )
 

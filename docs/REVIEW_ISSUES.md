@@ -83,7 +83,7 @@ Locked-test coverage after purging: DE-LU 89.67%, FR 80.00% (Gate-Val: DE-LU 92.
 | D8 | Code is asymmetric CQR; concept note describes the symmetric score | `CONCEPT_NOTE.md` §3 | done |
 | D9 | "Guaranteed finite-sample coverage" is an overclaim for autocorrelated data | `CONCEPT_NOTE.md` §1 | done |
 | D10 | Conformal quantile via `np.quantile(method="higher")` landed one rank too high (intervals slightly too wide) | `models/conformal.py` | done |
-| D11 | FR at h=1 narrowly loses to persistence on Gate-Val (MAE 1.398 vs 1.372); every bucket still wins | `train.py` | open (bucket-level baseline check is E3) |
+| D11 | FR at h=1 narrowly loses to persistence on Gate-Val (MAE 1.398 vs 1.372); every bucket still wins | `train.py` | accepted: reported as a limitation; the bucket-level baseline check is enforced by E3 |
 
 Phase D outcome (all choices made on Gate-Val only; the locked test was not scored):
 
@@ -155,10 +155,42 @@ Breakage audit after these changes: 29 of 29 caught, 0 survived, 0 stale.
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| E1 | Pooled coverage lets FR (87.4%) pass on DE-LU's surplus | `evaluate_gate.py:49-53` | open |
-| E2 | Gate reads self-reported run metrics; champion and challenger are not scored on the same window | `evaluate_gate.py` | open |
-| E3 | No persistence baseline in G3 | `evaluate_gate.py`, `train.py` | open |
-| E4 | Gate test injects metrics with `log_metric` instead of testing real ones | `test_pyfunc_contract.py:87-108` | open |
+| E1 | Pooled coverage lets FR (87.4%) pass on DE-LU's surplus | `evaluate_gate.py:49-53` | verified (pending CI) |
+| E2 | Gate reads self-reported run metrics; champion and challenger are not scored on the same window | `evaluate_gate.py` | verified (pending CI) |
+| E3 | No persistence baseline in G3 | `evaluate_gate.py`, `train.py` | verified (pending CI) |
+| E4 | Gate test injects metrics with `log_metric` instead of testing real ones | `test_pyfunc_contract.py:87-108` | verified (pending CI) |
+| E5 | Pooled pinball comparison was decided by DE-LU alone (its losses are about 20x FR's) | `evaluate_gate.py` | verified (pending CI) |
+| E6 | The gate test wrote model artifacts into `./mlruns` inside the repo on every run | `tests/test_pyfunc_contract.py` | verified (pending CI) |
+
+Phase E outcome. Phase D is `done` (CI green on `3d003c9` and `590859a`). The gate now re-scores
+`@challenger` and `@champion` itself on the same Gate-Val window and requires: per-zone coverage in
+`[0.87, 0.96]`, a median that beats persistence in every zone and horizon bucket, and a scale-free
+pinball ratio versus the champion of at most 1. Each decision is written to the model version as the
+tags `gate_decision` and `gate_reason`.
+
+Acceptance checks (all met):
+
+| Issue | Check | Evidence |
+| :--- | :--- | :--- |
+| E1 | Pooled coverage in bounds but one zone out of bounds is rejected | `test_gate_requires_every_zone_inside_coverage_bounds` |
+| E2 | Overwriting the logged run metrics does not change the decision | integration test poisons the metrics of both runs |
+| E3 | Losing to persistence in any zone and bucket is rejected | `test_gate_rejects_a_model_that_loses_to_persistence` |
+| E4 | A really worse model is rejected against a really better champion | one-tree challenger vs 15-tree champion, no injected numbers |
+
+Gate on the real snapshot with a throwaway registry (Gate-Val only):
+
+| Challenger | Coverage DE-LU / FR | Pinball ratio vs champion | Decision |
+| :--- | :--- | :--- | :--- |
+| Production model, no champion yet | 89.5% / 89.0% | n/a | promoted |
+| Identical retrain | 89.5% / 89.0% | 1.000 | promoted (tie) |
+| 20 trees, logged pinball falsified to 0.001 | 89.5% / 90.1% | 1.442 | rejected |
+| Level-based target | 87.1% / 86.7% | 1.021 | rejected (FR coverage, pinball) |
+
+Breakage audit after Phase E: 37 of 37 caught, 0 survived, 0 stale.
+
+Known limits of the gate: the coverage bounds are the pre-existing `[0.87, 0.96]`; no per-horizon
+floor was added, because any new threshold would have been chosen after seeing Gate-Val. The gate is
+not yet wired into a Databricks job (G3).
 
 ## Phase F: Hypothesis evaluation (after D and E freeze the model)
 

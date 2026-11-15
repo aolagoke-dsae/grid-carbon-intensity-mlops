@@ -19,7 +19,13 @@ from carbon_mlops.models.conformal import (
     select_calibration_window,
     walk_forward_calibrated_predictions,
 )
-from carbon_mlops.models.evaluate_gate import evaluate_and_promote_champion
+from carbon_mlops.models.evaluate_gate import (
+    GateEvaluation,
+    decide_promotion,
+    evaluate_and_promote_champion,
+    pinball_ratio,
+    summarize_gate_predictions,
+)
 from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
 from carbon_mlops.models.train import (
     compute_interval_metrics,
@@ -212,6 +218,11 @@ def test_calibrate_offsets_is_per_zone_and_horizon() -> None:
 def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> None:
     tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
     mlflow.set_tracking_uri(tracking_uri)
+    # Keep model artifacts in the test's temp folder; the default would be ./mlruns in the repo.
+    experiment_id = mlflow.create_experiment(
+        "gate_test", artifact_location=(tmp_path / "artifacts").as_uri()
+    )
+    mlflow.set_experiment(experiment_id=experiment_id)
     cfg = CarbonMLOpsConfig()
 
     bronze = _make_synthetic_bronze(hours=480)
@@ -269,38 +280,144 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
         artifacts.forecaster.predict(context=None, model_input=sample)["p50"].to_numpy(),
     )
 
+    # ---- Promotion gate with real models (no injected numbers decide anything) ----
+    # The synthetic series is almost noise-free, so coverage bounds are opened here; the
+    # bound logic itself is tested on its own below.
+    gate_cfg = CarbonMLOpsConfig(coverage_bounds=(0.0, 1.0))
+    model_name = "conformal_carbon_forecaster"
     client = MlflowClient(tracking_uri=tracking_uri)
-    client.log_metric(artifacts.run_id, "gate_val_coverage", 0.905)
-    client.log_metric(artifacts.run_id, "gate_val_mean_pinball", 8.50)
+
+    # Poison the run's own logged metrics: the gate must ignore them and re-score.
+    client.log_metric(artifacts.run_id, "gate_val_coverage_fr", 0.10)
+    client.log_metric(artifacts.run_id, "gate_val_mean_pinball", 9999.0)
 
     decision = evaluate_and_promote_champion(
-        cfg=cfg,
-        model_name="conformal_carbon_forecaster",
-        client=client,
+        feats, cfg=gate_cfg, model_name=model_name, client=client
     )
-    assert decision.promoted is True
-    champ = client.get_model_version_by_alias("conformal_carbon_forecaster", "champion")
+    assert decision.promoted is True, decision.reason
+    assert decision.champion is None
+    assert decision.challenger.n_rows == len(gate_preds)
+    for zone, zone_key in (("DE-LU", "de_lu"), ("FR", "fr")):
+        assert decision.challenger.coverage_by_zone[zone] == pytest.approx(
+            metrics[f"gate_val_coverage_{zone_key}"]
+        )
+        assert decision.challenger.mean_pinball_by_zone[zone] == pytest.approx(
+            metrics[f"gate_val_mean_pinball_{zone_key}"]
+        )
+    champ = client.get_model_version_by_alias(model_name, "champion")
     assert str(champ.version) == str(artifacts.model_version)
+    assert client.get_model_version(model_name, champ.version).tags["gate_decision"] == "promoted"
 
+    # A genuinely worse challenger (a single tree) whose run claims to be excellent.
     artifacts_bad = train_split_cqr(
         feats,
         cfg=cfg,
-        n_estimators=10,
+        n_estimators=1,
         register_mlflow=True,
         tracking_uri=tracking_uri,
     )
     assert artifacts_bad.run_id is not None
-    client.log_metric(artifacts_bad.run_id, "gate_val_coverage", 0.72)
-    client.log_metric(artifacts_bad.run_id, "gate_val_mean_pinball", 7.10)
+    client.log_metric(artifacts_bad.run_id, "gate_val_mean_pinball", 0.001)
 
     rejected = evaluate_and_promote_champion(
-        cfg=cfg,
-        model_name="conformal_carbon_forecaster",
-        client=client,
+        feats, cfg=gate_cfg, model_name=model_name, client=client
     )
     assert rejected.promoted is False
-    champ_after = client.get_model_version_by_alias("conformal_carbon_forecaster", "champion")
+    assert rejected.champion is not None
+    assert rejected.champion_version == str(artifacts.model_version)
+    assert rejected.pinball_ratio_vs_champion is not None
+    assert rejected.pinball_ratio_vs_champion > 1.0
+    assert any("pinball ratio" in check for check in rejected.failed_checks)
+    champ_after = client.get_model_version_by_alias(model_name, "champion")
     assert str(champ_after.version) == str(artifacts.model_version)
+    bad_tags = client.get_model_version(model_name, artifacts_bad.model_version).tags
+    assert bad_tags["gate_decision"] == "rejected"
+
+    # Champion and challenger were scored on exactly the same Gate-Val rows.
+    assert rejected.champion.n_rows == rejected.challenger.n_rows
+
+
+def _evaluation(
+    coverage: dict[str, float],
+    pinball: dict[str, float] | None = None,
+    losing: tuple[str, ...] = (),
+) -> GateEvaluation:
+    return GateEvaluation(
+        coverage_by_zone=coverage,
+        mean_pinball_by_zone=pinball or {"DE-LU": 16.0, "FR": 0.80},
+        cells_losing_to_persistence=losing,
+        n_rows=1000,
+    )
+
+
+def test_gate_requires_every_zone_inside_coverage_bounds() -> None:
+    cfg = CarbonMLOpsConfig()
+    assert decide_promotion(_evaluation({"DE-LU": 0.90, "FR": 0.89}), None, cfg) == ()
+
+    # Pooled coverage would be 0.90, inside the bounds, but FR alone is below the floor.
+    failed = decide_promotion(_evaluation({"DE-LU": 0.95, "FR": 0.85}), None, cfg)
+    assert len(failed) == 1
+    assert "coverage[FR]" in failed[0]
+
+    too_wide = decide_promotion(_evaluation({"DE-LU": 0.97, "FR": 0.90}), None, cfg)
+    assert len(too_wide) == 1
+    assert "coverage[DE-LU]" in too_wide[0]
+
+    # The bounds themselves are inclusive.
+    assert decide_promotion(_evaluation({"DE-LU": 0.87, "FR": 0.96}), None, cfg) == ()
+
+
+def test_gate_rejects_a_model_that_loses_to_persistence() -> None:
+    cfg = CarbonMLOpsConfig()
+    challenger = _evaluation({"DE-LU": 0.90, "FR": 0.90}, losing=("FR/short_1_6h",))
+    failed = decide_promotion(challenger, None, cfg)
+    assert failed == ("median does not beat persistence in FR/short_1_6h",)
+
+
+def test_gate_pinball_comparison_is_scale_free_and_ties_promote() -> None:
+    cfg = CarbonMLOpsConfig()
+    coverage = {"DE-LU": 0.90, "FR": 0.90}
+    champion = _evaluation(coverage, {"DE-LU": 16.0, "FR": 0.80})
+
+    assert decide_promotion(champion, champion, cfg) == ()
+
+    # Slightly better in DE-LU, clearly worse in FR. The pooled mean is unchanged
+    # (15.9 + 0.9 == 16.0 + 0.8), so a pooled rule would wave this through.
+    lopsided = _evaluation(coverage, {"DE-LU": 15.9, "FR": 0.90})
+    assert pinball_ratio(lopsided, champion) == pytest.approx((15.9 / 16.0 + 0.90 / 0.80) / 2)
+    failed = decide_promotion(lopsided, champion, cfg)
+    assert len(failed) == 1
+    assert "pinball ratio" in failed[0]
+
+    better = _evaluation(coverage, {"DE-LU": 15.0, "FR": 0.78})
+    assert decide_promotion(better, champion, cfg) == ()
+
+
+def test_summarize_gate_predictions_measures_each_zone_and_bucket() -> None:
+    cfg = CarbonMLOpsConfig()
+    preds = pd.DataFrame(
+        {
+            "zone": ["DE-LU", "DE-LU", "FR", "FR"],
+            "horizon_bucket": ["short_1_6h", "day_ahead_13_24h", "short_1_6h", "short_1_6h"],
+            "target_carbon_intensity": [100.0, 200.0, 30.0, 40.0],
+            "carbon_intensity_origin": [110.0, 201.0, 30.5, 39.5],
+            "p05": [90.0, 150.0, 31.0, 35.0],
+            "p50": [101.0, 190.0, 32.0, 43.0],
+            "p95": [120.0, 260.0, 36.0, 45.0],
+        }
+    )
+    evaluation = summarize_gate_predictions(preds, cfg)
+
+    assert evaluation.n_rows == 4
+    # FR: the first truth (30) lies below p05 (31), the second is inside.
+    assert evaluation.coverage_by_zone == {"DE-LU": 1.0, "FR": 0.5}
+    # DE-LU short: model error 1 beats persistence error 10. DE-LU day-ahead: 10 loses to 1.
+    # FR short: model errors (2, 3) lose to persistence errors (0.5, 0.5).
+    assert evaluation.cells_losing_to_persistence == ("DE-LU/day_ahead_13_24h", "FR/short_1_6h")
+    assert evaluation.mean_pinball_by_zone["DE-LU"] > evaluation.mean_pinball_by_zone["FR"]
+
+    with pytest.raises(ValueError, match="no rows for zone"):
+        summarize_gate_predictions(preds[preds["zone"] == "FR"], cfg)
 
 
 def test_scoring_only_recent_calib_rows_changes_no_result(tmp_path: Path) -> None:
