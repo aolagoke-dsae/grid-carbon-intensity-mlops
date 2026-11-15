@@ -155,14 +155,14 @@ Breakage audit after these changes: 29 of 29 caught, 0 survived, 0 stale.
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| E1 | Pooled coverage lets FR (87.4%) pass on DE-LU's surplus | `evaluate_gate.py:49-53` | verified (pending CI) |
-| E2 | Gate reads self-reported run metrics; champion and challenger are not scored on the same window | `evaluate_gate.py` | verified (pending CI) |
-| E3 | No persistence baseline in G3 | `evaluate_gate.py`, `train.py` | verified (pending CI) |
-| E4 | Gate test injects metrics with `log_metric` instead of testing real ones | `test_pyfunc_contract.py:87-108` | verified (pending CI) |
-| E5 | Pooled pinball comparison was decided by DE-LU alone (its losses are about 20x FR's) | `evaluate_gate.py` | verified (pending CI) |
-| E6 | The gate test wrote model artifacts into `./mlruns` inside the repo on every run | `tests/test_pyfunc_contract.py` | verified (pending CI) |
+| E1 | Pooled coverage lets FR (87.4%) pass on DE-LU's surplus | `evaluate_gate.py:49-53` | done |
+| E2 | Gate reads self-reported run metrics; champion and challenger are not scored on the same window | `evaluate_gate.py` | done |
+| E3 | No persistence baseline in G3 | `evaluate_gate.py`, `train.py` | done |
+| E4 | Gate test injects metrics with `log_metric` instead of testing real ones | `test_pyfunc_contract.py:87-108` | done |
+| E5 | Pooled pinball comparison was decided by DE-LU alone (its losses are about 20x FR's) | `evaluate_gate.py` | done |
+| E6 | The gate test wrote model artifacts into `./mlruns` inside the repo on every run | `tests/test_pyfunc_contract.py` | done |
 
-Phase E outcome. Phase D is `done` (CI green on `3d003c9` and `590859a`). The gate now re-scores
+Phase E outcome. Phases D and E are `done` (CI green on `3d003c9`, `590859a` and `648fd80`). The gate now re-scores
 `@challenger` and `@champion` itself on the same Gate-Val window and requires: per-zone coverage in
 `[0.87, 0.96]`, a median that beats persistence in every zone and horizon bucket, and a scale-free
 pinball ratio versus the champion of at most 1. Each decision is written to the model version as the
