@@ -33,6 +33,7 @@ TRAIN = "src/carbon_mlops/models/train.py"
 CONFORMAL = "src/carbon_mlops/models/conformal.py"
 WRAPPER = "src/carbon_mlops/models/pyfunc_wrapper.py"
 GATE = "src/carbon_mlops/models/evaluate_gate.py"
+ANALYSIS = "src/carbon_mlops/analysis/hypotheses.py"
 
 COPIED_PATHS: tuple[str, ...] = ("src", "tests", "data/bronze_snapshot")
 COPIED_FILES: tuple[str, ...] = ("pyproject.toml",)
@@ -241,10 +242,10 @@ MUTATIONS: tuple[Mutation, ...] = (
     ),
     Mutation(
         "D2",
-        "Calib rows needed by the first calibration window are not scored",
+        "rows needed by the first calibration window are not scored",
         TRAIN,
-        "window_start = gate_start - pd.Timedelta(days=cfg.recalibration_window_days)",
-        "window_start = gate_start - pd.Timedelta(days=cfg.recalibration_window_days - 1)",
+        "window_start = eval_start - pd.Timedelta(days=cfg.recalibration_window_days)",
+        "window_start = eval_start - pd.Timedelta(days=cfg.recalibration_window_days - 1)",
     ),
     Mutation(
         "G3",
@@ -320,6 +321,90 @@ MUTATIONS: tuple[Mutation, ...] = (
         GATE,
         "promoted = not failed",
         "promoted = True",
+    ),
+    Mutation(
+        "F",
+        "locked-test replay seeded from Calib instead of Gate-Val",
+        TRAIN,
+        'forecaster, splits["gate_val"], splits["locked_test"], cfg)',
+        'forecaster, splits["calib"], splits["locked_test"], cfg)',
+    ),
+    Mutation(
+        "F",
+        "bootstrap resamples single days instead of 7-day blocks",
+        ANALYSIS,
+        "block = min(block_days, n_days)",
+        "block = 1",
+    ),
+    Mutation(
+        "F",
+        "calibration coverage ignores the upper interval bound",
+        ANALYSIS,
+        'df["covered"] = (y >= df["p05"].to_numpy()) & (y <= df["p95"].to_numpy())',
+        'df["covered"] = y >= df["p05"].to_numpy()',
+    ),
+    Mutation(
+        "F",
+        "H1a decision uses the wrong direction",
+        ANALYSIS,
+        "supported=bool(upper_99 < 0.0) if decisive else None,",
+        "supported=bool(upper_99 > 0.0) if decisive else None,",
+    ),
+    Mutation(
+        "F",
+        "H1b decision uses the wrong direction",
+        ANALYSIS,
+        "supported=bool(lower_99 > 0.0) if decisive else None,",
+        "supported=bool(lower_99 < 0.0) if decisive else None,",
+    ),
+    Mutation(
+        "F",
+        "H2 midday window taken in UTC instead of local time",
+        ANALYSIS,
+        'local = df["timestamp_utc"].dt.tz_convert(LOCAL_TIMEZONE)',
+        'local = df["timestamp_utc"]',
+    ),
+    Mutation(
+        "F",
+        "H2 keeps days with missing midday hours",
+        ANALYSIS,
+        "wide = wide[complete]",
+        "wide = wide[complete | True]",
+    ),
+    Mutation(
+        "F",
+        "H3a permutation does not shuffle",
+        ANALYSIS,
+        "shuffled[cols] = block[donor].reshape(len(zdf), len(cols))",
+        "shuffled[cols] = block.reshape(len(zdf), len(cols))",
+    ),
+    Mutation(
+        "F",
+        "H3a reversal needs only one end",
+        ANALYSIS,
+        "intervals[SHORT_BUCKET][0] > 1.0 and intervals[DAY_AHEAD_BUCKET][1] < 1.0",
+        "intervals[SHORT_BUCKET][0] > 1.0 or intervals[DAY_AHEAD_BUCKET][1] < 1.0",
+    ),
+    Mutation(
+        "F",
+        "H3b difference taken as short minus day-ahead",
+        ANALYSIS,
+        'out = (wide[DAY_AHEAD_BUCKET] - wide[SHORT_BUCKET]).rename("difference").reset_index()',
+        'out = (wide[SHORT_BUCKET] - wide[DAY_AHEAD_BUCKET]).rename("difference").reset_index()',
+    ),
+    Mutation(
+        "F",
+        "H3b registered test uses all origins instead of 00:00 UTC",
+        ANALYSIS,
+        'midnight = width[width["origin_hour_utc"] == 0]',
+        "midnight = width",
+    ),
+    Mutation(
+        "F",
+        "verdict hides disagreement between analyses",
+        ANALYSIS,
+        "if corrected == registered:",
+        "if True:",
     ),
 )
 

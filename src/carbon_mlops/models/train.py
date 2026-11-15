@@ -235,21 +235,44 @@ def evaluate_on_gate_val(
     inside the replay from errors observed before each origin. Training and the promotion
     gate both call this, so a challenger and a champion are always judged the same way.
     """
-    gate_df = splits["gate_val"]
-    # Only Calib origins inside the first trailing window can ever be used for calibration,
-    # so older Calib rows are not scored. This changes no result, only the run time.
-    gate_start = gate_df["origin_timestamp"].min()
-    window_start = gate_start - pd.Timedelta(days=cfg.recalibration_window_days)
-    recent_calib = splits["calib"][splits["calib"]["origin_timestamp"] >= window_start]
-    history = pd.concat([recent_calib, gate_df], ignore_index=True)
+    return _walk_forward_over_split(forecaster, splits["calib"], splits["gate_val"], cfg)
+
+
+def evaluate_on_locked_test(
+    forecaster: ConformalCarbonForecaster,
+    splits: dict[str, pd.DataFrame],
+    cfg: CarbonMLOpsConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Replay the recalibration schedule over the Locked Test (docs/ANALYSIS_PLAN_H1_H3.md).
+
+    Identical to evaluate_on_gate_val, one split later: the first calibration window is
+    filled from Gate-Val errors, later windows from Locked-Test errors as they realize.
+    Call this only from notebooks/02_cqr_calibration_analysis.py.
+    """
+    return _walk_forward_over_split(forecaster, splits["gate_val"], splits["locked_test"], cfg)
+
+
+def _walk_forward_over_split(
+    forecaster: ConformalCarbonForecaster,
+    prior_df: pd.DataFrame,
+    eval_df: pd.DataFrame,
+    cfg: CarbonMLOpsConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Walk forward over `eval_df`, seeding the first calibration window from `prior_df`."""
+    # Only prior origins inside the first trailing window can ever be used for calibration,
+    # so older prior rows are not scored. This changes no result, only the run time.
+    eval_start = eval_df["origin_timestamp"].min()
+    window_start = eval_start - pd.Timedelta(days=cfg.recalibration_window_days)
+    recent_prior = prior_df[prior_df["origin_timestamp"] >= window_start]
+    history = pd.concat([recent_prior, eval_df], ignore_index=True)
     scored = add_conformity_scores(forecaster, history)
-    gate_preds = walk_forward_calibrated_predictions(
+    eval_preds = walk_forward_calibrated_predictions(
         scored,
-        eval_start=gate_start,
-        eval_end=gate_df["origin_timestamp"].max(),
+        eval_start=eval_start,
+        eval_end=eval_df["origin_timestamp"].max(),
         cfg=cfg,
     )
-    return scored, gate_preds
+    return scored, eval_preds
 
 
 def train_split_cqr(

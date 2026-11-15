@@ -30,3 +30,24 @@ def test_plot_probabilistic_forecast_renders_png(tmp_path: Path) -> None:
     rendered = plot_probabilistic_forecast(pd.DataFrame(rows), output_path=out_file)
     assert rendered.exists()
     assert rendered.stat().st_size > 1000
+
+
+def test_plot_coverage_by_horizon_renders_png(tmp_path: Path) -> None:
+    from carbon_mlops.viz.diagnostics import plot_coverage_by_horizon
+
+    rows = [
+        {
+            "zone": zone,
+            "breakdown": "horizon_h",
+            "level": str(h),
+            "coverage": 0.90 - 0.001 * h,
+            "coverage_ci_low": 0.86,
+            "coverage_ci_high": 0.93,
+        }
+        for zone in ("DE-LU", "FR")
+        for h in range(1, 25)
+    ]
+    rows.append({"zone": "FR", "breakdown": "all", "level": "all", "coverage": 0.9})
+    out = plot_coverage_by_horizon(pd.DataFrame(rows), tmp_path / "coverage.png")
+    assert out.exists()
+    assert out.stat().st_size > 5000

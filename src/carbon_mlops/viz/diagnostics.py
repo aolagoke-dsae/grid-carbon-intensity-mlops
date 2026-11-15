@@ -72,3 +72,42 @@ def plot_probabilistic_forecast(
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
     return output_path
+
+
+def plot_coverage_by_horizon(
+    calibration_df: pd.DataFrame,
+    output_path: Path,
+    nominal: float = 0.90,
+    reference_band: tuple[float, float] = (0.87, 0.96),
+) -> Path:
+    """Plot empirical coverage per lead time and zone with its block-bootstrap interval."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    by_lead = calibration_df[calibration_df["breakdown"] == "horizon_h"].copy()
+    by_lead["horizon_h"] = by_lead["level"].astype(int)
+    palette = {"DE-LU": "#d95f02", "FR": "#1b9e77"}
+
+    fig, ax = plt.subplots(figsize=(9, 4.4), dpi=150)
+    ax.axhspan(*reference_band, color="#888888", alpha=0.12, label="Reference band")
+    ax.axhline(nominal, color="#222222", linestyle="--", linewidth=1.2, label="Nominal 90%")
+    for zone, grp in by_lead.groupby("zone", sort=True):
+        grp = grp.sort_values("horizon_h")
+        color = palette.get(zone, "#2b8cbe")
+        ax.fill_between(
+            grp["horizon_h"],
+            grp["coverage_ci_low"],
+            grp["coverage_ci_high"],
+            color=color,
+            alpha=0.2,
+        )
+        ax.plot(
+            grp["horizon_h"], grp["coverage"], color=color, marker="o", markersize=3, label=zone
+        )
+    ax.set_title("Empirical Coverage of the 90% Interval by Lead Time (95% block-bootstrap band)")
+    ax.set_xlabel("Forecast Lead Time (Hours Ahead)")
+    ax.set_ylabel("Empirical Coverage")
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=8.5, frameon=True)
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+    return output_path

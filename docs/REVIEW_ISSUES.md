@@ -208,6 +208,34 @@ not yet wired into a Databricks job (G3).
 | F10 | H3 permutation importance: no per-bucket models exist, and features correlate at 0.99 | notebook | open |
 | F11 | Locked test has been evaluated more than once; disclose it | README, `CONCEPT_NOTE.md` | open |
 
+Phase F progress (2026-11-15). **The Locked Test has not been scored with the frozen model.**
+
+| Step | State |
+| :--- | :--- |
+| Analysis plan `docs/ANALYSIS_PLAN_H1_H3.md`, approved and committed (`23bf83d`) before any analysis code existed | done once pushed |
+| Analysis code: `src/carbon_mlops/analysis/hypotheses.py`, `train.evaluate_on_locked_test`, `notebooks/02_cqr_calibration_analysis.py` | verified (pending CI) |
+| Single locked-test run (`--run`) | not started; waits for the plan and code to be pushed and CI to be green |
+| Reproduction check (`--check`), write-up, F1–F11 statuses | not started |
+
+Verification of the analysis code, none of it on the Locked Test:
+
+- 15 unit tests on synthetic data with hand-computed answers (bootstrap, calibration table, H1, H2
+  including the daylight-saving window, H3a, H3b, verdict rule, locked-test replay).
+- Full dry run of the notebook on **Gate-Val** (`--dry-run-gate-val`), twice, with 10,000 resamples:
+  about 4.6 minutes each, and the calibration CSV, results CSV and run record are byte-identical
+  between the two runs.
+- Breakage audit: 49 of 49 caught, 0 survived, 0 stale (12 new breakages for the analysis).
+
+Found while building it:
+
+| ID | Issue | State |
+| :--- | :--- | :--- |
+| F12 | Draft plan shuffled H3a features "as whole days", which never shuffles time-of-day features | fixed in the plan before it was committed |
+| F13 | Bootstrap percentile of infinite ratios (zero calendar importance) returned NaN, silently failing the H3a rule | fixed, with a test |
+| F14 | A recalibration window shorter than the step plus one day leaves the longest lead time without offsets at a split boundary; the run stops with an explicit error | documented; the frozen 30-day / 7-day setting is unaffected |
+
+Run time of the test suite is now 11–13 s against the 15 s standard (47 tests).
+
 ## Phase G: Databricks deployment (parallel to B–F, except G3)
 
 | ID | Issue | Where | Status |
