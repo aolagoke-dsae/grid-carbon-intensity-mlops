@@ -1,7 +1,7 @@
 .PHONY: test run-local deploy
 
 test:
-	ruff check src tests notebooks
+	ruff check src tests notebooks scripts
 	pytest -v
 
 run-local:

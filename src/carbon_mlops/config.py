@@ -32,6 +32,9 @@ class CarbonMLOpsConfig:
     schema: str = "carbon_mlops"
     local_data_dir: Path = Path("data")
     bronze_snapshot_path: Path = Path("data/bronze_snapshot/entsoe_generation_sample.parquet")
+    # Pinned SHA-256 of the committed snapshot (Gate G1). Regenerate the file with
+    # scripts/export_bronze_snapshot.py and update this value and the snapshot README together.
+    bronze_snapshot_sha256: str = "c3dc7796be7589eb72c5363277057b164493f909f81500f982d4f3160eea34a9"
     dashboard_data_dir: Path = Path("dashboards/data")
     images_dir: Path = Path("docs/images")
 

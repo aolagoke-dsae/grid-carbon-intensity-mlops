@@ -34,7 +34,9 @@ To prevent repeated model-selection peeking from contaminating statistical hypot
 3. **Validation / Promotion Gate Split (10%):** Used exclusively by `evaluate_gate.py` (`Gate G3`) to evaluate `@challenger` vs. `@champion` coverage and pinball loss prior to promotion.
 4. **Locked Holdout Test Split (15%):** Sealed until **Sprint 3 (`US-3.1`)** and evaluated once for pre-registered hypotheses `H1–H3`.
 
-*Feature Scope Note:* Features combine strictly causal origin-state grid telemetry (`feature_ts <= origin_timestamp`), target calendar encodings (`target_hour`, `target_dow`, `target_month`), and—where available in the upstream snapshot—day-ahead TSO generation/load schedules published prior to `origin_timestamp`.
+*Feature Scope Note:* Features combine strictly causal origin-state grid telemetry (`feature_ts <= origin_timestamp`), target calendar encodings (`target_hour`, `target_dow`, `target_month`), and—where available in the upstream snapshot—day-ahead TSO generation/load schedules published prior to `origin_timestamp`. The current Bronze snapshot exports no day-ahead schedules, prices or cross-border flows, so the model uses origin-state and calendar features only.
+
+*Scope of the Prediction Intervals:* The target is production-based carbon intensity computed with the upstream **median** life-cycle emission factors. The `[p05, p95]` interval therefore expresses forecast uncertainty only. It does not include the uncertainty of the emission factors themselves, which upstream quantifies by Monte Carlo and which, for `FR`, is larger than the forecast interval (see `data/bronze_snapshot/README.md`).
 
 ---
 

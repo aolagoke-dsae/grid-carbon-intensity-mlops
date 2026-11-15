@@ -38,10 +38,51 @@ CAUSAL_FEATURE_COLS: tuple[str, ...] = (
 FEATURE_PRIMARY_KEYS: list[str] = ["zone", "origin_timestamp", "horizon_h"]
 
 
-def _build_zone_origin_features(zone_df: pd.DataFrame) -> pd.DataFrame:
-    """Compute strictly causal origin-state and backward-looking lag/rolling features per zone."""
-    df = zone_df.sort_values("timestamp_utc").reset_index(drop=True).copy()
-    df["origin_timestamp"] = pd.to_datetime(df["timestamp_utc"])
+def regularize_zone_to_hourly_grid(zone_df: pd.DataFrame) -> pd.DataFrame:
+    """Put one zone on a gap-free hourly grid and blank out intensities that cannot be trusted.
+
+    Row-based shifts are only lags in hours when every hour has a row, so missing hours are
+    inserted as all-NaN rows. Hours flagged upstream as partial (a published series was
+    missing) or not fully covered (`hours_covered` < 1) keep their row but lose their
+    intensity, so they are used neither as forecast origins, nor as lag values, nor as targets.
+    """
+    df = zone_df.copy()
+    df["timestamp_utc"] = pd.to_datetime(df["timestamp_utc"])
+    ts = df["timestamp_utc"]
+    if ts.duplicated().any():
+        raise ValueError("Duplicate timestamp_utc within a zone")
+    if (ts != ts.dt.floor("h")).any():
+        raise ValueError("timestamp_utc must be aligned to whole hours")
+
+    untrusted = pd.Series(False, index=df.index)
+    if "is_partial" in df.columns:
+        untrusted |= df["is_partial"].astype(bool)
+    if "hours_covered" in df.columns:
+        untrusted |= df["hours_covered"] < 1.0 - 1e-6
+    df.loc[untrusted, "carbon_intensity_g_kwh"] = np.nan
+
+    grid = pd.date_range(ts.min(), ts.max(), freq="h").as_unit(ts.dt.unit)
+    n_missing = len(grid) - len(df)
+    if n_missing or untrusted.any():
+        logger.info(
+            "Hourly grid: inserted %d missing hours, masked %d partial/incomplete hours",
+            n_missing,
+            int(untrusted.sum()),
+        )
+    zone = df["zone"].iloc[0]
+    df = df.set_index("timestamp_utc").reindex(grid).rename_axis("timestamp_utc").reset_index()
+    df["zone"] = zone
+    return df
+
+
+def _build_zone_origin_features(grid_df: pd.DataFrame) -> pd.DataFrame:
+    """Compute strictly causal origin-state and backward-looking lag/rolling features per zone.
+
+    Expects the gap-free hourly frame from regularize_zone_to_hourly_grid, so shift(k) is
+    exactly the value k hours before the origin (NaN where that hour is missing or masked).
+    """
+    df = grid_df.copy()
+    df["origin_timestamp"] = df["timestamp_utc"]
     df["max_feature_timestamp"] = df["origin_timestamp"]
 
     ci = df["carbon_intensity_g_kwh"]
@@ -79,10 +120,11 @@ def build_horizon_features(
         sub = bronze_df[bronze_df["zone"] == zone].copy()
         if sub.empty:
             continue
-        origin_df = _build_zone_origin_features(sub)
+        grid_df = regularize_zone_to_hourly_grid(sub)
+        origin_df = _build_zone_origin_features(grid_df)
         target_lookup = (
-            sub[["timestamp_utc", "carbon_intensity_g_kwh"]]
-            .assign(timestamp_utc=lambda d: pd.to_datetime(d["timestamp_utc"]))
+            grid_df[["timestamp_utc", "carbon_intensity_g_kwh"]]
+            .dropna(subset=["carbon_intensity_g_kwh"])
             .rename(
                 columns={
                     "timestamp_utc": "target_timestamp",

@@ -31,16 +31,21 @@ Gate-Val: DE-LU 92.46%, FR 87.37%, pooled 89.92%.
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| B1 | No export script; snapshot lineage is not reproducible | new `scripts/export_bronze_snapshot.py` | open |
-| B2 | 15 DE-LU partial hours re-admitted with a recomputed CI; `is_partial` unused | export script, `build_features.py` | open |
-| B3 | 4 missing FR hours; row-based `shift()` gives 48 wrong `ci_lag_24h` values | `build_features.py:49-54` | open |
-| B4 | 2 FR hours cover 30/45 minutes but appear as full hours | export script | open |
-| B5 | Three undocumented denominators (`total`, `priced`, `gen_total`); no `priced_share` column | snapshot `README.md`, export script | open |
-| B6 | G1 hash test compares the file to itself; pipeline passes `expected_sha256=None` | `test_ingestion_provenance.py:18`, `ingest_entsoe.py` | open |
-| B7 | README says data ends 23:00 (it ends 22:00); hash grain is zone-year, not row | snapshot `README.md` | open |
-| B8 | Timestamps are tz-naive | `ingest_entsoe.py` | open |
-| B9 | Prices, load and flows dropped although the concept note promises day-ahead signals | export script, `CONCEPT_NOTE.md` | open (optional before freeze) |
-| B10 | Monte Carlo factor uncertainty dropped; for FR (44 g wide) it exceeds the forecast interval (19 g) | `CONCEPT_NOTE.md` | open |
+| B1 | No export script; snapshot lineage is not reproducible | new `scripts/export_bronze_snapshot.py` | done |
+| B2 | 15 DE-LU partial hours re-admitted with a recomputed CI; `is_partial` unused | export script, `build_features.py` | done |
+| B3 | 4 missing FR hours; row-based `shift()` gives 48 wrong `ci_lag_24h` values | `build_features.py:49-54` | done |
+| B4 | 2 FR hours cover 30/45 minutes but appear as full hours | export script | done |
+| B5 | Three undocumented denominators (`total`, `priced`, `gen_total`); no `priced_share` column | snapshot `README.md`, export script | done |
+| B6 | G1 hash test compares the file to itself; pipeline passes `expected_sha256=None` | `test_ingestion_provenance.py:18`, `ingest_entsoe.py` | done |
+| B7 | README says data ends 23:00 (it ends 22:00); hash grain is zone-year, not row | snapshot `README.md` | done |
+| B8 | Timestamps are tz-naive | `ingest_entsoe.py` | done |
+| B9 | Prices, load and flows dropped although the concept note promises day-ahead signals | export script, `CONCEPT_NOTE.md` | deferred (multi-day change; revisit after Dec 1) |
+| B10 | Monte Carlo factor uncertainty dropped; for FR (44 g wide) it exceeds the forecast interval (19 g) | `CONCEPT_NOTE.md` | done |
+| B11 | Derived `data/lakehouse_local/*.parquet` was tracked despite `.gitignore`, so every run dirtied the tree | `data/lakehouse_local/` | done |
+| B12 | `upstream_payload_sha256` stored a hash of the upstream hash, which did not resolve to the upstream manifest | export script | done |
+
+Phase B outcome: lags are now hour-exact and 17 untrusted hours are masked. Locked-test coverage is unchanged
+(DE-LU 89.85%, FR 80.33%), as expected for hygiene fixes; the calibration problem is Phase D.
 
 ## Phase C: Splits and leakage gates
 

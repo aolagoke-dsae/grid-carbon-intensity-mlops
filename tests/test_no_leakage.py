@@ -88,3 +88,57 @@ def test_us21_materialize_uc_feature_table_offline_drops_target(tmp_path: Path) 
     assert "target_carbon_intensity" not in saved.columns
     for pk in ("zone", "origin_timestamp", "horizon_h"):
         assert pk in saved.columns
+
+
+def test_lags_are_hours_not_rows_when_hours_are_missing(tmp_path: Path) -> None:
+    cfg = CarbonMLOpsConfig()
+    bronze = _make_synthetic_bronze(hours=96)
+    gap = [pd.Timestamp("2025-01-03 05:00:00"), pd.Timestamp("2025-01-03 06:00:00")]
+    gapped = bronze[~((bronze["zone"] == "FR") & bronze["timestamp_utc"].isin(gap))]
+
+    features = build_horizon_features(gapped, cfg=cfg, write_output=False, base_dir=tmp_path)
+    truth = bronze[bronze["zone"] == "FR"].set_index("timestamp_utc")["carbon_intensity_g_kwh"]
+    truth = truth.drop(index=gap)
+
+    fr = features[(features["zone"] == "FR") & (features["horizon_h"] == 1)]
+    assert not fr["origin_timestamp"].isin(gap).any(), "A missing hour cannot be an origin"
+    for k in (1, 3, 6, 24):
+        expected = truth.reindex(fr["origin_timestamp"] - pd.Timedelta(hours=k)).to_numpy()
+        actual = fr[f"ci_lag_{k}h"].to_numpy()
+        assert np.allclose(actual, expected, equal_nan=True), f"ci_lag_{k}h is not origin-{k}h"
+
+    # The hour right after the gap has no 1h-old observation, so its lag must be NaN.
+    after_gap = fr[fr["origin_timestamp"] == pd.Timestamp("2025-01-03 07:00:00")]
+    assert after_gap["ci_lag_1h"].isna().all()
+
+    # Targets that fall in the gap are absent, never filled from a neighbouring hour.
+    in_gap = features[(features["zone"] == "FR") & features["target_timestamp"].isin(gap)]
+    assert in_gap["target_carbon_intensity"].isna().all()
+
+
+def test_partial_and_incomplete_hours_are_masked(tmp_path: Path) -> None:
+    cfg = CarbonMLOpsConfig()
+    bronze = _make_synthetic_bronze(hours=96)
+    bronze["is_partial"] = False
+    bronze["hours_covered"] = 1.0
+    partial_ts = pd.Timestamp("2025-01-03 10:00:00")
+    short_ts = pd.Timestamp("2025-01-03 15:00:00")
+    de = bronze["zone"] == "DE-LU"
+    bronze.loc[de & (bronze["timestamp_utc"] == partial_ts), "is_partial"] = True
+    bronze.loc[de & (bronze["timestamp_utc"] == short_ts), "hours_covered"] = 0.5
+
+    features = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
+    de_feats = features[features["zone"] == "DE-LU"]
+    flagged = [partial_ts, short_ts]
+
+    assert not de_feats["origin_timestamp"].isin(flagged).any()
+    as_target = de_feats[de_feats["target_timestamp"].isin(flagged)]
+    assert as_target["target_carbon_intensity"].isna().all()
+    one_hour_later = de_feats[
+        de_feats["origin_timestamp"].isin([t + pd.Timedelta(hours=1) for t in flagged])
+    ]
+    assert one_hour_later["ci_lag_1h"].isna().all()
+
+    # The other zone is untouched.
+    fr_feats = features[features["zone"] == "FR"]
+    assert fr_feats["origin_timestamp"].isin(flagged).any()

@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from carbon_mlops.config import CarbonMLOpsConfig
@@ -29,6 +30,18 @@ REQUIRED_BRONZE_COLUMNS: tuple[str, ...] = (
     "nuclear_share",
     "fossil_share",
     "upstream_payload_sha256",
+    "priced_share",
+    "hours_covered",
+    "n_partial_steps",
+)
+
+SHARE_COLUMNS: tuple[str, ...] = (
+    "wind_share",
+    "solar_share",
+    "renewable_share",
+    "nuclear_share",
+    "fossil_share",
+    "priced_share",
 )
 
 
@@ -62,6 +75,36 @@ def validate_bronze_schema(df: pd.DataFrame, allowed_zones: tuple[str, ...]) -> 
     if df["upstream_payload_sha256"].isna().any() or (df["upstream_payload_sha256"] == "").any():
         raise ValueError("Missing upstream_payload_sha256 provenance hashes")
 
+    ts = pd.to_datetime(df["timestamp_utc"])
+    if (ts != ts.dt.floor("h")).any():
+        raise ValueError("timestamp_utc must be aligned to whole UTC hours")
+    if df.duplicated(subset=["zone", "timestamp_utc"]).any():
+        raise ValueError("Duplicate (zone, timestamp_utc) rows in Bronze snapshot")
+
+    priced = df["priced_mwh"] > 0
+    recomputed = df.loc[priced, "emissions_kg"] / df.loc[priced, "priced_mwh"]
+    if not np.allclose(recomputed, df.loc[priced, "carbon_intensity_g_kwh"], rtol=1e-9):
+        raise ValueError("carbon_intensity_g_kwh is not emissions_kg / priced_mwh")
+
+    shares = df[list(SHARE_COLUMNS)]
+    if ((shares < 0) | (shares > 1 + 1e-9)).any().any():
+        raise ValueError("Generation shares must lie in [0, 1]")
+    if ((df["hours_covered"] <= 0) | (df["hours_covered"] > 1 + 1e-9)).any():
+        raise ValueError("hours_covered must lie in (0, 1]")
+
+
+def normalize_timestamps_to_utc(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy with timezone-aware UTC timestamp_utc (naive values are UTC by contract)."""
+    out = df.copy()
+    ts = pd.to_datetime(out["timestamp_utc"])
+    if ts.dt.tz is None:
+        out["timestamp_utc"] = ts.dt.tz_localize("UTC")
+    elif str(ts.dt.tz) != "UTC":
+        raise ValueError(f"timestamp_utc must be UTC, got timezone {ts.dt.tz}")
+    else:
+        out["timestamp_utc"] = ts
+    return out
+
 
 def ingest_bronze_snapshot(
     cfg: CarbonMLOpsConfig | None = None,
@@ -69,9 +112,16 @@ def ingest_bronze_snapshot(
     expected_sha256: str | None = None,
     base_dir: Path | None = None,
 ) -> pd.DataFrame:
-    """Load Bronze Parquet snapshot, enforce Gate G1 provenance, and write bronze table."""
+    """Load Bronze Parquet snapshot, enforce Gate G1 provenance, and write bronze table.
+
+    The committed snapshot is always verified against the SHA-256 pinned in the config.
+    A caller that supplies its own snapshot_path must also supply expected_sha256 to get
+    the same check.
+    """
     cfg = cfg or CarbonMLOpsConfig()
     src_path = snapshot_path or cfg.bronze_snapshot_path
+    if expected_sha256 is None and src_path == cfg.bronze_snapshot_path:
+        expected_sha256 = cfg.bronze_snapshot_sha256
     target_base = base_dir or cfg.local_data_dir
 
     if not src_path.exists():
@@ -88,7 +138,7 @@ def ingest_bronze_snapshot(
     validate_bronze_schema(df, cfg.zones)
 
     ingested_ts = datetime.now(timezone.utc).isoformat()
-    df = df.copy()
+    df = normalize_timestamps_to_utc(df)
     df["source_file_sha256"] = actual_sha256
     df["ingested_at_utc"] = ingested_ts
 

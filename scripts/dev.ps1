@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 
 switch ($Task) {
     "test" {
-        python -m ruff check src tests notebooks
+        python -m ruff check src tests notebooks scripts
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python -m pytest -v
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
