@@ -1,8 +1,10 @@
 # Databricks Verification Checklist (Phase G)
 
-**Status (2026-11-15): in progress on the Free Edition workspace.** Steps 1 to 5 pass (step 3 on its
-second attempt, after one fix). Step 6 shows a small numerical difference from the local run. Steps 7
-to 12, the inference job, have not been run. Phase G is not done.
+**Status (2026-11-15): steps 1 to 11 pass on the Free Edition workspace.** Both jobs run end to end.
+Step 3 needed one fix (the MLflow experiment); the inference job passed on its first attempt. Still
+open: step 12 (re-running training against an existing champion) has not been run, the model-version
+tags were not confirmed because the CLI does not return them, and step 6 shows a small numerical
+difference from the local run.
 
 ## What was verified locally, and what that does and does not show
 
@@ -49,12 +51,12 @@ Run from the repository root with the Databricks CLI authenticated against the w
 | 4 | In Catalog Explorer, open `workspace.carbon_mlops` | Tables `bronze_entsoe_hourly` (35,082 rows), `grid_horizon_training`, and `grid_horizon_features` with a primary key on `zone`, `origin_timestamp`, `horizon_h` | **Pass on structure**, checked through the CLI: all three Delta tables exist; `grid_horizon_features` has constraint `grid_horizon_features_pk` on the three key columns, all `NOT NULL`, 24 columns, no target column. Row counts checked by SQL and equal to the local run: Bronze 17,543 (DE-LU) and 17,539 (FR); training table 839,904 rows of which 838,823 have a target; feature table 839,904 rows, all keys distinct |
 | 5 | Open the registered model `workspace.carbon_mlops.conformal_carbon_forecaster` | Version 1 holds both `challenger` and `champion`; its tag `gate_decision` is `promoted` | **Pass on aliases**: version 1 is `READY` and holds both aliases. The gate task logged "Promoted @challenger v1 to @champion". The tag itself was not confirmed: the CLI does not return model-version tags |
 | 6 | Compare the gate task's log with the local run | Coverage DE-LU 0.8951 and FR 0.8899 on Gate-Val, as in `docs/REVIEW_ISSUES.md` | **Close, not equal**: Databricks gives DE-LU 0.8941 and FR 0.8880. See "Numerical difference" below |
-| 7 | `databricks bundle run -t dev carbon_batch_inference` | Two tasks succeed: recalibrate, then score | |
-| 8 | Open the registered model again | Version 2 holds `champion`, with tags `recalibrated_from_version = 1` and `calibrated_through = 2025-12-31 23:00:00+00:00` | |
-| 9 | `SELECT zone, count(*), min(origin_timestamp) FROM workspace.carbon_mlops.gold_forecasts GROUP BY zone` | 24 rows per zone, origin `2025-12-31 22:00` for both | |
-| 10 | Check `p05 <= p50 <= p95` and `p05 >= 0` on every row of `gold_forecasts` | Holds on all 48 rows | |
-| 11 | Browse the volume `workspace.carbon_mlops.exports` | `latest_24h_forecasts.csv` with 48 data rows | |
-| 12 | Re-run step 3 | Succeeds again; a new challenger version is compared against the current champion | |
+| 7 | `databricks bundle run -t dev carbon_batch_inference` | Two tasks succeed: recalibrate, then score | **Pass on attempt 1**, run `807621109176368`: recalibrate 77 s, score 77 s |
+| 8 | Open the registered model again | Version 2 holds `champion`, with tags `recalibrated_from_version = 1` and `calibrated_through = 2025-12-31 23:00:00+00:00` | **Pass on aliases**: versions 1 and 2 are `READY`; `champion` is version 2, `challenger` is version 1. The task logged "Recalibrated ... v1 -> v2 through 2025-12-31 23:00:00". Tags not confirmed through the CLI |
+| 9 | `SELECT zone, count(*), min(origin_timestamp) FROM workspace.carbon_mlops.gold_forecasts GROUP BY zone` | 24 rows per zone, origin `2025-12-31 22:00` for both | **Pass**: 24 rows per zone, one origin (`2025-12-31 22:00 UTC`) in each, lead times 1 to 24 all present |
+| 10 | Check `p05 <= p50 <= p95` and `p05 >= 0` on every row of `gold_forecasts` | Holds on all 48 rows | **Pass**: 0 ordering violations, 0 negative lower bounds, 0 nulls, and `interval_width` equals `p95 - p05` on every row |
+| 11 | Browse the volume `workspace.carbon_mlops.exports` | `latest_24h_forecasts.csv` with 48 data rows | **Pass**: file present (20,906 bytes), 48 data rows, 24 per zone, with `p05`, `p50` and `p95` |
+| 12 | Re-run step 3 | Succeeds again; a new challenger version is compared against the current champion | Not run |
 
 If a step fails, record the error text in the "Observed" column before changing anything. The job
 schedule is paused by design: the snapshot is static, so a recurring run would rescore the same hours.
@@ -129,6 +131,44 @@ Consequences:
   reproduce there bit for bit. On another platform expect differences of about 0.1 to 0.2 percentage
   points. This is far smaller than the bootstrap intervals (about plus or minus 3 points), but the
   claim "reproducible" should be read as "reproducible on the same platform".
+
+### 2026-11-15, inference job, attempt 1 (run `807621109176368`)
+
+| Task | Result |
+| :--- | :--- |
+| `recalibrate_champion` | SUCCESS, 77 s; registered v2 as `champion`, recalibrated from v1 through 2025-12-31 23:00 UTC |
+| `spark_udf_batch_score` | SUCCESS, 77 s; scored 48 rows into `workspace.carbon_mlops.gold_forecasts` and wrote the extract to the volume |
+
+Assumptions settled:
+
+| # | Assumption | Outcome |
+| :--- | :--- | :--- |
+| 8 | `spark_udf` can load the model on serverless | confirmed. MLflow used `env_manager="local"` (its default) and warned that this does not recreate the training environment; here training and scoring share the same serverless environment, so the warning does not apply |
+| 9 | The job can create the volume and write a file to `/Volumes/...` with pandas | confirmed |
+
+Forecast written for origin 2025-12-31 22:00 UTC (rounded, gCO2eq/kWh):
+
+| Zone | Lead time | Origin intensity | p05 | p50 | p95 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| DE-LU | 1 h | 269.8 | 245.7 | 283.8 | 297.8 |
+| DE-LU | 12 h | 269.8 | 156.9 | 287.1 | 439.4 |
+| DE-LU | 24 h | 269.8 | 126.5 | 337.2 | 561.4 |
+| FR | 1 h | 41.4 | 30.9 | 35.5 | 46.8 |
+| FR | 12 h | 41.4 | 27.4 | 45.3 | 72.3 |
+| FR | 24 h | 41.4 | 22.6 | 42.1 | 69.0 |
+
+The snapshot ends at that hour, so these forecasts cannot be checked against outcomes.
+
+### Still unverified after these runs
+
+- Step 12: a second training run, where the gate compares a new challenger with an existing champion
+  inside Unity Catalog. Locally this path is tested; on the workspace the gate has only run with no
+  champion present.
+- The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).
+- `fe.write_table(mode="merge")`: the feature table was created fresh on each run (`create_table`
+  on attempt 1, then merged on attempt 2, which succeeded, so the merge path did run once).
+- The `prod` target, and the schedule (paused by design).
+- Library versions installed on serverless were not recorded.
 
 ## GitHub Actions
 

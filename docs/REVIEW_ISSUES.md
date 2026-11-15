@@ -263,27 +263,27 @@ Run time of the test suite is now 11–13 s against the 15 s standard (47 tests)
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| G1 | No wheel artifact, libraries or Serverless environment | `databricks.yml` | implemented; unverified on a workspace (wheel build and bundle consistency checked locally) |
-| G2 | `parameters` mis-indented, so scoring likely runs in local mode | `databricks.yml:44` | verified locally by `tests/test_jobs.py` (pending CI); unverified on a workspace |
-| G3 | No train or gate task or entry point; `@champion` is never registered | `databricks.yml`, `pyproject.toml` | implemented; unverified on a workspace (train, gate and recalibrate run from the installed wheel locally) |
-| G4 | `carbon-ingest` reads a relative path not packaged in the wheel | `ingest_entsoe.py`, `pyproject.toml` | verified locally (pending CI): snapshot ships in the wheel and is hash-checked; unverified on a workspace |
-| G5 | Column compared to the list from `.collect()` | `batch_score.py:72-73` | implemented; unverified on a workspace (rewritten as a per-zone join; the Spark code has never run) |
-| G6 | Feature table written as plain Delta, then merged as a feature table with no primary key | `build_features.py:143-177` | implemented; unverified on a workspace (targets moved to `grid_horizon_training`; the feature table is created only by the feature client) |
-| G7 | No `CREATE SCHEMA`; two-level and three-level table names are mixed | `store.py`, `batch_score.py` | implemented; unverified on a workspace (three-level names via `qualified_table_name`, tested; `CREATE SCHEMA` has never run) |
-| G8 | `databricks-feature-engineering` not declared (verify whether Serverless preinstalls it) | `pyproject.toml` | implemented; unverified on a workspace (listed as a serverless environment dependency) |
-| G9 | Model pickles `carbon_mlops` by reference with no `code_paths` | `train.py:223-230` | verified locally (pending CI): model stores the package via `code_paths`; loading in a serverless UDF is unverified |
-| G10 | Dashboard CSV written to a relative path on an ephemeral driver | `batch_score.py:104-105` | implemented; unverified on a workspace (extract written to a Unity Catalog volume) |
-| G11 | "Latest origin" is a global max over a static snapshot; hourly schedule rescores the same rows | `batch_score.py:71-73` | implemented; unverified on a workspace (newest complete origin per zone; pandas version tested, Spark version never run; schedule paused and weekly) |
-| G12 | Wheel entry points returned a DataFrame; a console entry point's return value becomes the exit status | `pyproject.toml`, new `jobs.py` | verified locally (pending CI) |
-| G13 | Model name was resolved differently in training and in the gate | `train.resolve_model_name` | verified locally (pending CI) |
+| G1 | No wheel artifact, libraries or Serverless environment | `databricks.yml` | verified on the workspace 2026-11-15: bundle validates, deploys and both jobs run on serverless environment 5 |
+| G2 | `parameters` mis-indented, so scoring likely runs in local mode | `databricks.yml:44` | verified on the workspace 2026-11-15: the scoring task received `--mode databricks` and ran the Spark path |
+| G3 | No train or gate task or entry point; `@champion` is never registered | `databricks.yml`, `pyproject.toml` | verified on the workspace 2026-11-15: train, gate and recalibrate ran; step 12 (gate against an existing champion) not yet run there |
+| G4 | `carbon-ingest` reads a relative path not packaged in the wheel | `ingest_entsoe.py`, `pyproject.toml` | verified on the workspace 2026-11-15: ingest read the snapshot from the wheel; 35,082 rows |
+| G5 | Column compared to the list from `.collect()` | `batch_score.py:72-73` | verified on the workspace 2026-11-15: scoring selected the newest origin per zone |
+| G6 | Feature table written as plain Delta, then merged as a feature table with no primary key | `build_features.py:143-177` | verified on the workspace 2026-11-15: feature table created with its primary key; no clash; second run merged into it |
+| G7 | No `CREATE SCHEMA`; two-level and three-level table names are mixed | `store.py`, `batch_score.py` | verified on the workspace 2026-11-15: schema created, three-level names resolve |
+| G8 | `databricks-feature-engineering` not declared (verify whether Serverless preinstalls it) | `pyproject.toml` | verified on the workspace 2026-11-15: the feature client installed and ran |
+| G9 | Model pickles `carbon_mlops` by reference with no `code_paths` | `train.py:223-230` | verified on the workspace 2026-11-15: the gate and the Spark UDF both loaded the model from its stored code |
+| G10 | Dashboard CSV written to a relative path on an ephemeral driver | `batch_score.py:104-105` | verified on the workspace 2026-11-15: extract in the volume, 48 rows |
+| G11 | "Latest origin" is a global max over a static snapshot; hourly schedule rescores the same rows | `batch_score.py:71-73` | verified on the workspace 2026-11-15: 24 rows per zone for origin 2025-12-31 22:00 UTC |
+| G12 | Wheel entry points returned a DataFrame; a console entry point's return value becomes the exit status | `pyproject.toml`, new `jobs.py` | verified on the workspace 2026-11-15: all six tasks exit cleanly |
+| G13 | Model name was resolved differently in training and in the gate | `train.resolve_model_name` | verified on the workspace 2026-11-15 |
 | G14 | The breakage audit's scratch copy lacked `databricks.yml`, so a bundle test would have failed on every breakage and made all of them look caught | `scripts/mutation_audit.py` | fixed; the audit now requires the untouched copy to pass first |
 | G15 | A wheel task has no default MLflow experiment, so `mlflow.start_run` failed on Databricks with "Could not find experiment with ID None" (found on the first workspace run; not foreseen) | `train.ensure_mlflow_experiment` | verified on the workspace: training job run `293770853415496` succeeds |
 | G16 | Gate-Val coverage differs slightly between platforms (local 0.8951 / 0.8899, Databricks 0.8941 / 0.8880) with identical data | `docs/DATABRICKS_VERIFICATION.md` | open: cause not verified; results are reproducible on the same platform only |
 
-Phase G state (2026-11-15). **The training job is verified on the workspace; the inference job has
-not been run.** Steps 1 to 5 of `docs/DATABRICKS_VERIFICATION.md` pass. Still unexecuted anywhere:
-scheduled recalibration against Unity Catalog, `spark_udf` scoring, the Gold table and the volume
-export. Phase G cannot be `done` until steps 7 to 12 pass.
+Phase G state (2026-11-15). **Both jobs run end to end on the Free Edition workspace.** Steps 1 to 11
+of `docs/DATABRICKS_VERIFICATION.md` pass; training run `293770853415496`, inference run
+`807621109176368`. Not yet `done`: step 12 has not been run, the model-version tags are unconfirmed,
+G16 (small cross-platform numerical difference) is open, and CI has not been confirmed on these commits.
 
 What changed:
 
