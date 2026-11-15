@@ -45,6 +45,19 @@ SHARE_COLUMNS: tuple[str, ...] = (
 )
 
 
+PACKAGED_DATA_DIR = "carbon_mlops_data"
+
+
+def packaged_snapshot_path(cfg: CarbonMLOpsConfig) -> Path:
+    """Location of the snapshot shipped inside the wheel, next to the `carbon_mlops` package.
+
+    A Databricks job has no repository checkout, so the wheel carries the snapshot in a
+    sibling `carbon_mlops_data` folder (see pyproject.toml, force-include).
+    """
+    site_root = Path(__file__).resolve().parents[2]
+    return site_root / PACKAGED_DATA_DIR / cfg.bronze_snapshot_path.name
+
+
 def compute_file_sha256(path: Path) -> str:
     """Compute hex SHA-256 checksum of a file on disk."""
     digest = hashlib.sha256()
@@ -120,7 +133,10 @@ def ingest_bronze_snapshot(
     """
     cfg = cfg or CarbonMLOpsConfig()
     src_path = snapshot_path or cfg.bronze_snapshot_path
-    if expected_sha256 is None and src_path == cfg.bronze_snapshot_path:
+    is_pinned_snapshot = src_path == cfg.bronze_snapshot_path
+    if is_pinned_snapshot and not src_path.exists():
+        src_path = packaged_snapshot_path(cfg)
+    if expected_sha256 is None and is_pinned_snapshot:
         expected_sha256 = cfg.bronze_snapshot_sha256
     target_base = base_dir or cfg.local_data_dir
 
@@ -143,7 +159,9 @@ def ingest_bronze_snapshot(
     df["ingested_at_utc"] = ingested_ts
 
     table_name = f"{cfg.schema}.bronze_entsoe_hourly"
-    write_table(df, table_name=table_name, mode="overwrite", base_dir=target_base)
+    write_table(
+        df, table_name=table_name, mode="overwrite", base_dir=target_base, catalog=cfg.catalog
+    )
     logger.info(
         "Ingested %d Bronze rows (sha256=%s) into %s",
         len(df),

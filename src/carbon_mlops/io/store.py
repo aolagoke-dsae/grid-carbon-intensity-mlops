@@ -22,21 +22,36 @@ def _local_parquet_path(table_name: str, base_dir: Path) -> Path:
     return base_dir / "lakehouse_local" / f"{sanitized}.parquet"
 
 
+def qualified_table_name(table_name: str, catalog: str | None) -> str:
+    """Return the three-level Unity Catalog name of a logical `schema.table` name.
+
+    A name that already has three levels, or a call without a catalog, is returned unchanged.
+    """
+    if catalog and table_name.count(".") == 1:
+        return f"{catalog}.{table_name}"
+    return table_name
+
+
 def write_table(
     df: pd.DataFrame,
     table_name: str,
     mode: str = "overwrite",
     base_dir: Path = Path("data"),
+    catalog: str | None = None,
 ) -> str:
     """Persist a DataFrame to Unity Catalog Delta on Databricks or local Parquet offline."""
     if is_databricks_runtime():
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
-        spark_df = spark.createDataFrame(df)
-        spark_df.write.format("delta").mode(mode).saveAsTable(table_name)
-        logger.info("Wrote %d rows to Delta table %s", len(df), table_name)
-        return table_name
+        full_name = qualified_table_name(table_name, catalog)
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {full_name.rsplit('.', 1)[0]}")
+        writer = spark.createDataFrame(df).write.format("delta").mode(mode)
+        if mode == "overwrite":
+            writer = writer.option("overwriteSchema", "true")
+        writer.saveAsTable(full_name)
+        logger.info("Wrote %d rows to Delta table %s", len(df), full_name)
+        return full_name
 
     target_path = _local_parquet_path(table_name, base_dir)
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,14 +63,19 @@ def write_table(
     return str(target_path)
 
 
-def read_table(table_name: str, base_dir: Path = Path("data")) -> pd.DataFrame:
+def read_table(
+    table_name: str,
+    base_dir: Path = Path("data"),
+    catalog: str | None = None,
+) -> pd.DataFrame:
     """Read a logical table from Unity Catalog Delta on Databricks or local Parquet offline."""
     if is_databricks_runtime():
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
-        logger.info("Reading Delta table %s", table_name)
-        return spark.table(table_name).toPandas()
+        full_name = qualified_table_name(table_name, catalog)
+        logger.info("Reading Delta table %s", full_name)
+        return spark.table(full_name).toPandas()
 
     target_path = _local_parquet_path(table_name, base_dir)
     if not target_path.exists():

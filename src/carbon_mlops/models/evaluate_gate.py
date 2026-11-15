@@ -19,11 +19,12 @@ from mlflow.tracking import MlflowClient
 
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.io.store import is_databricks_runtime
-from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
 from carbon_mlops.models.train import (
     chronological_four_way_split,
     evaluate_on_gate_val,
+    load_registered_forecaster,
     pinball_loss,
+    resolve_model_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -135,15 +136,6 @@ def decide_promotion(
     return tuple(failed)
 
 
-def _load_forecaster(model_name: str, alias: str) -> ConformalCarbonForecaster:
-    """Load the registered model behind an alias and return the wrapped Python model."""
-    loaded = mlflow.pyfunc.load_model(f"models:/{model_name}@{alias}")
-    forecaster = loaded.unwrap_python_model()
-    if not isinstance(forecaster, ConformalCarbonForecaster):
-        raise TypeError(f"{model_name}@{alias} is not a ConformalCarbonForecaster")
-    return forecaster
-
-
 def _warn_if_logged_metrics_differ(
     client: MlflowClient, run_id: str, evaluation: GateEvaluation
 ) -> None:
@@ -173,19 +165,14 @@ def evaluate_and_promote_champion(
     if is_databricks_runtime():
         mlflow.set_registry_uri("databricks-uc")
 
-    if model_name is None:
-        model_name = (
-            f"{cfg.catalog}.{cfg.schema}.conformal_carbon_forecaster"
-            if is_databricks_runtime()
-            else "conformal_carbon_forecaster"
-        )
+    model_name = model_name or resolve_model_name(cfg)
 
     splits = chronological_four_way_split(features_df, cfg=cfg)
 
     challenger_mv = client.get_model_version_by_alias(name=model_name, alias="challenger")
     challenger_version = str(challenger_mv.version)
     _, challenger_preds = evaluate_on_gate_val(
-        _load_forecaster(model_name, "challenger"), splits, cfg
+        load_registered_forecaster(model_name, "challenger"), splits, cfg
     )
     challenger_eval = summarize_gate_predictions(challenger_preds, cfg)
     _warn_if_logged_metrics_differ(client, challenger_mv.run_id, challenger_eval)
@@ -199,7 +186,7 @@ def evaluate_and_promote_champion(
         champion_mv = None
     if champion_mv is not None and champion_version != challenger_version:
         _, champion_preds = evaluate_on_gate_val(
-            _load_forecaster(model_name, "champion"), splits, cfg
+            load_registered_forecaster(model_name, "champion"), splits, cfg
         )
         champion_eval = summarize_gate_predictions(champion_preds, cfg)
 

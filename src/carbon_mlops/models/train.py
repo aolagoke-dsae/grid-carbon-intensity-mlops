@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import lightgbm as lgb
 import mlflow
@@ -275,6 +276,100 @@ def _walk_forward_over_split(
     return scored, eval_preds
 
 
+REGISTERED_MODEL_BASENAME = "conformal_carbon_forecaster"
+
+
+def resolve_model_name(cfg: CarbonMLOpsConfig) -> str:
+    """Three-level Unity Catalog model name on Databricks, a plain name on a local registry."""
+    if is_databricks_runtime():
+        return f"{cfg.catalog}.{cfg.schema}.{REGISTERED_MODEL_BASENAME}"
+    return REGISTERED_MODEL_BASENAME
+
+
+def load_registered_forecaster(model_name: str, alias: str) -> ConformalCarbonForecaster:
+    """Load the registered model behind an alias and return the wrapped Python model."""
+    if is_databricks_runtime():
+        mlflow.set_registry_uri("databricks-uc")
+    loaded = mlflow.pyfunc.load_model(f"models:/{model_name}@{alias}")
+    forecaster = loaded.unwrap_python_model()
+    if not isinstance(forecaster, ConformalCarbonForecaster):
+        raise TypeError(f"{model_name}@{alias} is not a ConformalCarbonForecaster")
+    return forecaster
+
+
+def register_forecaster(
+    forecaster: ConformalCarbonForecaster,
+    sample_df: pd.DataFrame,
+    cfg: CarbonMLOpsConfig,
+    run_name: str,
+    alias: str,
+    params: dict[str, object] | None = None,
+    metrics: dict[str, float] | None = None,
+    tags: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Log a forecaster to MLflow, register it and point `alias` at the new version.
+
+    The package source is stored with the model (`code_paths`), so it loads in a Spark UDF
+    or a serving container where the project wheel is not installed. Returns
+    (run_id, model_version).
+    """
+    if is_databricks_runtime():
+        mlflow.set_registry_uri("databricks-uc")
+    model_name = resolve_model_name(cfg)
+
+    sample_in = (
+        sample_df[["zone", *CAUSAL_FEATURE_COLS]]
+        .head(10)
+        .astype(
+            {
+                "horizon_h": "float64",
+                "target_dow": "float64",
+                "target_month": "float64",
+                "is_weekend": "float64",
+            }
+        )
+    )
+    sample_out = forecaster.predict(context=None, model_input=sample_in)
+    signature = infer_signature(sample_in, sample_out)
+    package_dir = Path(__file__).resolve().parents[1]
+
+    with mlflow.start_run(run_name=run_name) as run:
+        run_id = run.info.run_id
+        mlflow.log_params(
+            {
+                "nominal_coverage": cfg.nominal_coverage,
+                "cqr_mode": "asymmetric_two_sided_per_horizon",
+                "target_mode": forecaster.target_mode,
+                "recalibration_window_days": cfg.recalibration_window_days,
+                "recalibration_step_days": cfg.recalibration_step_days,
+                "zones": ",".join(cfg.zones),
+                **(params or {}),
+            }
+        )
+        if metrics:
+            mlflow.log_metrics(metrics)
+        logged = mlflow.pyfunc.log_model(
+            artifact_path="model",
+            python_model=forecaster,
+            signature=signature,
+            input_example=sample_in,
+            pip_requirements=forecaster.pip_requirements,
+            code_paths=[str(package_dir)],
+            registered_model_name=model_name,
+        )
+        model_version = str(logged.registered_model_version)
+        client = MlflowClient()
+        client.set_registered_model_alias(name=model_name, alias=alias, version=model_version)
+        for key, value in (tags or {}).items():
+            client.set_model_version_tag(
+                name=model_name, version=model_version, key=key, value=value
+            )
+        logger.info(
+            "Registered %s v%s as @%s (run_id=%s)", model_name, model_version, alias, run_id
+        )
+    return run_id, model_version
+
+
 def train_split_cqr(
     features_df: pd.DataFrame,
     cfg: CarbonMLOpsConfig | None = None,
@@ -321,63 +416,15 @@ def train_split_cqr(
     if register_mlflow:
         if tracking_uri:
             mlflow.set_tracking_uri(tracking_uri)
-        if is_databricks_runtime():
-            mlflow.set_registry_uri("databricks-uc")
-
-        model_name = f"{cfg.catalog}.{cfg.schema}.conformal_carbon_forecaster"
-        if not is_databricks_runtime() and (
-            not tracking_uri or tracking_uri.startswith(("file:", "sqlite:"))
-        ):
-            model_name = "conformal_carbon_forecaster"
-
-        sample_in = (
-            gate_df[["zone", *CAUSAL_FEATURE_COLS]]
-            .head(10)
-            .astype(
-                {
-                    "horizon_h": "float64",
-                    "target_dow": "float64",
-                    "target_month": "float64",
-                    "is_weekend": "float64",
-                }
-            )
+        run_id, model_version = register_forecaster(
+            forecaster,
+            sample_df=gate_df,
+            cfg=cfg,
+            run_name="split_cqr_challenger",
+            alias="challenger",
+            params={**lgbm_params, "calibrated_through": str(calibrated_through)},
+            metrics=metrics,
         )
-        sample_out = forecaster.predict(context=None, model_input=sample_in)
-        signature = infer_signature(sample_in, sample_out)
-
-        with mlflow.start_run(run_name="split_cqr_challenger") as run:
-            run_id = run.info.run_id
-            mlflow.log_params(
-                {
-                    **lgbm_params,
-                    "nominal_coverage": cfg.nominal_coverage,
-                    "cqr_mode": "asymmetric_two_sided_per_horizon",
-                    "target_mode": cfg.target_mode,
-                    "recalibration_window_days": cfg.recalibration_window_days,
-                    "recalibration_step_days": cfg.recalibration_step_days,
-                    "calibrated_through": str(calibrated_through),
-                    "zones": ",".join(cfg.zones),
-                }
-            )
-            mlflow.log_metrics(metrics)
-            logged = mlflow.pyfunc.log_model(
-                artifact_path="model",
-                python_model=forecaster,
-                signature=signature,
-                input_example=sample_in,
-                pip_requirements=forecaster.pip_requirements,
-                registered_model_name=model_name,
-            )
-            model_version = str(logged.registered_model_version)
-            client = MlflowClient()
-            client.set_registered_model_alias(
-                name=model_name,
-                alias="challenger",
-                version=model_version,
-            )
-            logger.info(
-                "Registered %s v%s as @challenger (run_id=%s)", model_name, model_version, run_id
-            )
 
     return TrainingArtifacts(
         forecaster=forecaster,

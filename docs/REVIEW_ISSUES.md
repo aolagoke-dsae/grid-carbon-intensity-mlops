@@ -263,17 +263,41 @@ Run time of the test suite is now 11–13 s against the 15 s standard (47 tests)
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| G1 | No wheel artifact, libraries or Serverless environment | `databricks.yml` | open |
-| G2 | `parameters` mis-indented, so scoring likely runs in local mode | `databricks.yml:44` | open |
-| G3 | No train or gate task or entry point; `@champion` is never registered | `databricks.yml`, `pyproject.toml` | open |
-| G4 | `carbon-ingest` reads a relative path not packaged in the wheel | `ingest_entsoe.py`, `pyproject.toml` | open |
-| G5 | Column compared to the list from `.collect()` | `batch_score.py:72-73` | open |
-| G6 | Feature table written as plain Delta, then merged as a feature table with no primary key | `build_features.py:143-177` | open |
-| G7 | No `CREATE SCHEMA`; two-level and three-level table names are mixed | `store.py`, `batch_score.py` | open |
-| G8 | `databricks-feature-engineering` not declared (verify whether Serverless preinstalls it) | `pyproject.toml` | open |
-| G9 | Model pickles `carbon_mlops` by reference with no `code_paths` | `train.py:223-230` | open |
-| G10 | Dashboard CSV written to a relative path on an ephemeral driver | `batch_score.py:104-105` | open |
-| G11 | "Latest origin" is a global max over a static snapshot; hourly schedule rescores the same rows | `batch_score.py:71-73` | open |
+| G1 | No wheel artifact, libraries or Serverless environment | `databricks.yml` | implemented; unverified on a workspace (wheel build and bundle consistency checked locally) |
+| G2 | `parameters` mis-indented, so scoring likely runs in local mode | `databricks.yml:44` | verified locally by `tests/test_jobs.py` (pending CI); unverified on a workspace |
+| G3 | No train or gate task or entry point; `@champion` is never registered | `databricks.yml`, `pyproject.toml` | implemented; unverified on a workspace (train, gate and recalibrate run from the installed wheel locally) |
+| G4 | `carbon-ingest` reads a relative path not packaged in the wheel | `ingest_entsoe.py`, `pyproject.toml` | verified locally (pending CI): snapshot ships in the wheel and is hash-checked; unverified on a workspace |
+| G5 | Column compared to the list from `.collect()` | `batch_score.py:72-73` | implemented; unverified on a workspace (rewritten as a per-zone join; the Spark code has never run) |
+| G6 | Feature table written as plain Delta, then merged as a feature table with no primary key | `build_features.py:143-177` | implemented; unverified on a workspace (targets moved to `grid_horizon_training`; the feature table is created only by the feature client) |
+| G7 | No `CREATE SCHEMA`; two-level and three-level table names are mixed | `store.py`, `batch_score.py` | implemented; unverified on a workspace (three-level names via `qualified_table_name`, tested; `CREATE SCHEMA` has never run) |
+| G8 | `databricks-feature-engineering` not declared (verify whether Serverless preinstalls it) | `pyproject.toml` | implemented; unverified on a workspace (listed as a serverless environment dependency) |
+| G9 | Model pickles `carbon_mlops` by reference with no `code_paths` | `train.py:223-230` | verified locally (pending CI): model stores the package via `code_paths`; loading in a serverless UDF is unverified |
+| G10 | Dashboard CSV written to a relative path on an ephemeral driver | `batch_score.py:104-105` | implemented; unverified on a workspace (extract written to a Unity Catalog volume) |
+| G11 | "Latest origin" is a global max over a static snapshot; hourly schedule rescores the same rows | `batch_score.py:71-73` | implemented; unverified on a workspace (newest complete origin per zone; pandas version tested, Spark version never run; schedule paused and weekly) |
+| G12 | Wheel entry points returned a DataFrame; a console entry point's return value becomes the exit status | `pyproject.toml`, new `jobs.py` | verified locally (pending CI) |
+| G13 | Model name was resolved differently in training and in the gate | `train.resolve_model_name` | verified locally (pending CI) |
+| G14 | The breakage audit's scratch copy lacked `databricks.yml`, so a bundle test would have failed on every breakage and made all of them look caught | `scripts/mutation_audit.py` | fixed; the audit now requires the untouched copy to pass first |
+
+Phase G state (2026-11-15). **No Databricks code path has been executed.** Phase G cannot be `done`
+until `docs/DATABRICKS_VERIFICATION.md` has been worked through on the workspace.
+
+What changed:
+
+- `databricks.yml`: wheel artifact, a serverless environment per job, six tasks, `parameters` inside
+  `python_wheel_task`. Training job: ingest, features, train, gate. Inference job: recalibrate, score.
+- `jobs.py`: one entry point per task. `run_recalibration_job` is the scheduled recalibration the
+  evaluation assumes: it recomputes the champion's offsets from the latest realized errors and
+  registers the result as the new champion, tagged with the version it came from.
+- Storage uses three-level names and creates the schema; the snapshot ships inside the wheel.
+
+Local evidence:
+
+- Wheel built with the bundle's build command: 27 files, six entry points, the 4.6 MB snapshot.
+- All six entry points run from the installed wheel in an empty folder with no repository:
+  ingest 0.2 s, features 4.1 s, train 10.4 s, gate 3.5 s, recalibrate 1.3 s, score (local) 10.5 s.
+  The gate promoted version 1; recalibration produced version 2, calibrated through
+  2025-12-31 23:00 UTC with all 48 offset cells; it scored origin 2025-12-31 22:00 for both zones.
+- 53 tests in about 12.5 s. Breakage audit: 58 of 58 caught, with the baseline check passing.
 
 ## Dependencies
 

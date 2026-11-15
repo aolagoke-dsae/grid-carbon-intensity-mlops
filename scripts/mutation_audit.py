@@ -7,7 +7,10 @@ never modified.
 
 Exit code 0 means every breakage was caught. Exit code 1 means at least one survived (a
 missing test) or a breakage no longer applies because the code it targets has changed (the
-audit needs updating). Run it at the end of every review phase:
+audit needs updating). Exit code 2 means the untouched scratch copy itself fails the suite,
+in which case every breakage would falsely look "caught" and nothing is audited.
+
+Run it at the end of every review phase:
 
     python scripts/mutation_audit.py
     python scripts/mutation_audit.py --only C1 D2      # only issues whose ID matches
@@ -34,9 +37,13 @@ CONFORMAL = "src/carbon_mlops/models/conformal.py"
 WRAPPER = "src/carbon_mlops/models/pyfunc_wrapper.py"
 GATE = "src/carbon_mlops/models/evaluate_gate.py"
 ANALYSIS = "src/carbon_mlops/analysis/hypotheses.py"
+STORE = "src/carbon_mlops/io/store.py"
+JOBS = "src/carbon_mlops/jobs.py"
+SCORING = "src/carbon_mlops/inference/batch_score.py"
+BUNDLE = "databricks.yml"
 
 COPIED_PATHS: tuple[str, ...] = ("src", "tests", "data/bronze_snapshot")
-COPIED_FILES: tuple[str, ...] = ("pyproject.toml",)
+COPIED_FILES: tuple[str, ...] = ("pyproject.toml", "databricks.yml")
 
 
 @dataclass(frozen=True)
@@ -406,6 +413,74 @@ MUTATIONS: tuple[Mutation, ...] = (
         "if corrected == registered:",
         "if True:",
     ),
+    Mutation(
+        "G7",
+        "catalog prefixed onto an already three-level table name",
+        STORE,
+        'if catalog and table_name.count(".") == 1:',
+        "if catalog:",
+    ),
+    Mutation(
+        "G4",
+        "no fallback to the snapshot packaged in the wheel",
+        INGEST,
+        "if is_pinned_snapshot and not src_path.exists():",
+        "if False:",
+    ),
+    Mutation(
+        "G3",
+        "recalibration starts from the challenger instead of the champion",
+        JOBS,
+        'champion = load_registered_forecaster(model_name, "champion")',
+        'champion = load_registered_forecaster(model_name, "challenger")',
+    ),
+    Mutation(
+        "G3",
+        "recalibration stops five days before the newest observation",
+        JOBS,
+        'as_of = labelled["target_timestamp"].max() + pd.Timedelta(hours=1)',
+        'as_of = labelled["target_timestamp"].max() - pd.Timedelta(days=5)',
+    ),
+    Mutation(
+        "G3",
+        "recalibrated model is not made the champion",
+        JOBS,
+        'alias="champion",',
+        'alias="challenger",',
+    ),
+    Mutation(
+        "G11",
+        "scoring picks an origin with missing lead times",
+        SCORING,
+        "complete = features_df[size == n_horizons]",
+        "complete = features_df",
+    ),
+    Mutation(
+        "G2",
+        "bundle parameters placed beside python_wheel_task",
+        BUNDLE,
+        '            parameters: ["--mode", "databricks"]',
+        '          parameters: ["--mode", "databricks"]',
+    ),
+    Mutation(
+        "G1",
+        "a bundle task has no serverless environment",
+        BUNDLE,
+        "          environment_key: default\n"
+        "          python_wheel_task:\n"
+        "            package_name: grid_carbon_intensity_mlops\n"
+        "            entry_point: carbon-train",
+        "          python_wheel_task:\n"
+        "            package_name: grid_carbon_intensity_mlops\n"
+        "            entry_point: carbon-train",
+    ),
+    Mutation(
+        "G3",
+        "bundle names an entry point the wheel does not have",
+        BUNDLE,
+        "entry_point: carbon-gate",
+        "entry_point: carbon-evaluate",
+    ),
 )
 
 
@@ -416,6 +491,23 @@ def _copy_project(repo: Path, work: Path) -> None:
         shutil.copytree(repo / rel, work / rel, ignore=ignore)
     for rel in COPIED_FILES:
         shutil.copy(repo / rel, work / rel)
+
+
+def baseline_passes(repo: Path) -> bool:
+    """Run the suite on an unmodified scratch copy; the audit is meaningless if it fails."""
+    with tempfile.TemporaryDirectory(prefix="mutation_audit_") as tmp:
+        work = Path(tmp)
+        _copy_project(repo, work)
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"],
+            cwd=work,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if proc.returncode != 0:
+        logger.error("Baseline failed in the scratch copy:\n%s", proc.stdout[-1500:])
+    return proc.returncode == 0
 
 
 def run_mutation(repo: Path, mutation: Mutation) -> str:
@@ -447,6 +539,11 @@ def main() -> int:
     )
     args = parser.parse_args()
     repo = args.repo.resolve()
+
+    if not baseline_passes(repo):
+        logger.error("The untouched copy does not pass the suite; fix that before auditing.")
+        return 2
+    logger.info("Baseline: untouched scratch copy passes the suite")
 
     selected = [
         m for m in MUTATIONS if not args.only or any(token in m.issue for token in args.only)

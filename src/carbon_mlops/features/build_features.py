@@ -36,6 +36,8 @@ CAUSAL_FEATURE_COLS: tuple[str, ...] = (
 )
 
 FEATURE_PRIMARY_KEYS: list[str] = ["zone", "origin_timestamp", "horizon_h"]
+TRAINING_TABLE = "grid_horizon_training"
+FEATURE_TABLE = "grid_horizon_features"
 
 
 def regularize_zone_to_hourly_grid(zone_df: pd.DataFrame) -> pd.DataFrame:
@@ -243,9 +245,18 @@ def build_horizon_features(
     )
 
     if write_output:
-        table_name = f"{cfg.schema}.grid_horizon_features"
-        write_table(features_df, table_name=table_name, mode="overwrite", base_dir=target_base)
-        logger.info("Materialized %d horizon feature rows into %s", len(features_df), table_name)
+        # Features plus targets go to their own table. `grid_horizon_features` is owned by
+        # materialize_uc_feature_table, which creates it as a Unity Catalog feature table;
+        # writing a plain Delta table under that name first would block that.
+        table_name = f"{cfg.schema}.{TRAINING_TABLE}"
+        write_table(
+            features_df,
+            table_name=table_name,
+            mode="overwrite",
+            base_dir=target_base,
+            catalog=cfg.catalog,
+        )
+        logger.info("Materialized %d horizon rows into %s", len(features_df), table_name)
 
     return features_df
 
@@ -265,7 +276,8 @@ def materialize_uc_feature_table(
 
         spark = SparkSession.builder.getOrCreate()
         fe = FeatureEngineeringClient()
-        uc_table = f"{cfg.catalog}.{cfg.schema}.grid_horizon_features"
+        uc_table = f"{cfg.catalog}.{cfg.schema}.{FEATURE_TABLE}"
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {cfg.catalog}.{cfg.schema}")
         spark_df = spark.createDataFrame(feature_only_df)
 
         if not spark.catalog.tableExists(uc_table):
@@ -283,7 +295,7 @@ def materialize_uc_feature_table(
         return uc_table
 
     target_base = base_dir or cfg.local_data_dir
-    local_table = f"{cfg.schema}.grid_horizon_features_uc_offline"
+    local_table = f"{cfg.schema}.{FEATURE_TABLE}_uc_offline"
     written = write_table(
         feature_only_df, table_name=local_table, mode="overwrite", base_dir=target_base
     )
@@ -294,7 +306,9 @@ def materialize_uc_feature_table(
 def run_feature_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
     """Read Bronze table and materialize Silver & UC horizon features."""
     cfg = cfg or CarbonMLOpsConfig()
-    bronze_df = read_table(f"{cfg.schema}.bronze_entsoe_hourly", base_dir=cfg.local_data_dir)
+    bronze_df = read_table(
+        f"{cfg.schema}.bronze_entsoe_hourly", base_dir=cfg.local_data_dir, catalog=cfg.catalog
+    )
     features_df = build_horizon_features(bronze_df, cfg=cfg, write_output=True)
     materialize_uc_feature_table(features_df, cfg=cfg)
     return features_df

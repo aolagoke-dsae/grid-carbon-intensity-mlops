@@ -12,6 +12,7 @@ from mlflow.tracking import MlflowClient
 
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS, build_horizon_features
+from carbon_mlops.jobs import run_gate_job, run_recalibration_job, run_training_job
 from carbon_mlops.models.conformal import (
     add_conformity_scores,
     calibrate_offsets,
@@ -22,7 +23,6 @@ from carbon_mlops.models.conformal import (
 from carbon_mlops.models.evaluate_gate import (
     GateEvaluation,
     decide_promotion,
-    evaluate_and_promote_champion,
     pinball_ratio,
     summarize_gate_predictions,
 )
@@ -227,12 +227,8 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
 
     bronze = _make_synthetic_bronze(hours=480)
     feats = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
-    artifacts = train_split_cqr(
-        feats,
-        cfg=cfg,
-        n_estimators=15,
-        register_mlflow=True,
-        tracking_uri=tracking_uri,
+    artifacts = run_training_job(
+        cfg=cfg, features_df=feats, n_estimators=15, tracking_uri=tracking_uri
     )
     assert artifacts.run_id is not None
     assert artifacts.model_version is not None
@@ -291,9 +287,7 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
     client.log_metric(artifacts.run_id, "gate_val_coverage_fr", 0.10)
     client.log_metric(artifacts.run_id, "gate_val_mean_pinball", 9999.0)
 
-    decision = evaluate_and_promote_champion(
-        feats, cfg=gate_cfg, model_name=model_name, client=client
-    )
+    decision = run_gate_job(cfg=gate_cfg, features_df=feats, client=client)
     assert decision.promoted is True, decision.reason
     assert decision.champion is None
     assert decision.challenger.n_rows == len(gate_preds)
@@ -309,19 +303,13 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
     assert client.get_model_version(model_name, champ.version).tags["gate_decision"] == "promoted"
 
     # A genuinely worse challenger (a single tree) whose run claims to be excellent.
-    artifacts_bad = train_split_cqr(
-        feats,
-        cfg=cfg,
-        n_estimators=1,
-        register_mlflow=True,
-        tracking_uri=tracking_uri,
+    artifacts_bad = run_training_job(
+        cfg=cfg, features_df=feats, n_estimators=1, tracking_uri=tracking_uri
     )
     assert artifacts_bad.run_id is not None
     client.log_metric(artifacts_bad.run_id, "gate_val_mean_pinball", 0.001)
 
-    rejected = evaluate_and_promote_champion(
-        feats, cfg=gate_cfg, model_name=model_name, client=client
-    )
+    rejected = run_gate_job(cfg=gate_cfg, features_df=feats, client=client)
     assert rejected.promoted is False
     assert rejected.champion is not None
     assert rejected.champion_version == str(artifacts.model_version)
@@ -335,6 +323,31 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
 
     # Champion and challenger were scored on exactly the same Gate-Val rows.
     assert rejected.champion.n_rows == rejected.challenger.n_rows
+
+    # ---- Scheduled recalibration of the champion (the batch-inference job's first task) ----
+    new_version = run_recalibration_job(cfg=cfg, features_df=feats, client=client)
+    recalibrated_mv = client.get_model_version_by_alias(model_name, "champion")
+    assert str(recalibrated_mv.version) == new_version
+    assert int(new_version) > int(artifacts_bad.model_version)
+    tags = client.get_model_version(model_name, new_version).tags
+    assert tags["recalibrated_from_version"] == str(artifacts.model_version)
+
+    labelled = feats.dropna(subset=["target_carbon_intensity"])
+    newest = labelled["target_timestamp"].max() + pd.Timedelta(hours=1)
+    assert tags["calibrated_through"] == str(newest)
+
+    recalibrated = mlflow.pyfunc.load_model(f"models:/{model_name}@champion").unwrap_python_model()
+    # Same base models as the gated champion: identical raw quantiles, only offsets moved.
+    pd.testing.assert_frame_equal(
+        recalibrated.predict_raw_quantiles(one_origin),
+        artifacts.forecaster.predict_raw_quantiles(one_origin),
+    )
+    assert len(recalibrated.conformal_offsets) == len(cfg.zones) * len(cfg.horizons)
+    assert recalibrated.conformal_offsets != artifacts.forecaster.conformal_offsets
+    assert recalibrated.calibrated_through == str(newest)
+    # The rejected challenger keeps its alias and never became the recalibrated champion.
+    challenger_mv = client.get_model_version_by_alias(model_name, "challenger")
+    assert str(challenger_mv.version) == str(artifacts_bad.model_version)
 
 
 def _evaluation(

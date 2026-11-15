@@ -1,11 +1,20 @@
+# Databricks Asset Bundle for Serverless compute (Free Edition has no job clusters).
+#
+# Every task is a python_wheel_task that runs an entry point from pyproject.toml
+# [project.scripts]. The wheel is built by the `artifacts` block and attached to each job
+# through a serverless `environments` entry, together with databricks-feature-engineering,
+# which serverless does not preinstall.
+#
+# Catalog and schema come from CarbonMLOpsConfig (workspace.carbon_mlops), not from bundle
+# variables, so the code and the bundle cannot disagree.
 bundle:
   name: grid-carbon-intensity-mlops
 
-variables:
-  catalog:
-    default: workspace
-  schema:
-    default: carbon_mlops
+artifacts:
+  default:
+    type: whl
+    path: .
+    build: python -m pip wheel . --no-deps --wheel-dir dist
 
 targets:
   dev:
@@ -18,27 +27,67 @@ resources:
   jobs:
     carbon_training_pipeline:
       name: "[${bundle.target}] carbon-training-pipeline"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - ./dist/*.whl
+              - databricks-feature-engineering
       tasks:
         - task_key: ingest_bronze
+          environment_key: default
           python_wheel_task:
             package_name: grid_carbon_intensity_mlops
             entry_point: carbon-ingest
         - task_key: materialize_uc_features
           depends_on:
             - task_key: ingest_bronze
+          environment_key: default
           python_wheel_task:
             package_name: grid_carbon_intensity_mlops
             entry_point: carbon-features
+        - task_key: train_challenger
+          depends_on:
+            - task_key: materialize_uc_features
+          environment_key: default
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-train
+        - task_key: promotion_gate
+          depends_on:
+            - task_key: train_challenger
+          environment_key: default
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-gate
 
     carbon_batch_inference:
       name: "[${bundle.target}] carbon-batch-inference"
+      # Paused: the Bronze snapshot is static, so a schedule would rescore the same hours.
+      # Weekly matches the recalibration step the evaluation assumes.
       schedule:
-        quartz_cron_expression: "0 15 * * * ?"
+        quartz_cron_expression: "0 15 6 ? * MON"
         timezone_id: "UTC"
         pause_status: PAUSED
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - ./dist/*.whl
+              - databricks-feature-engineering
       tasks:
+        - task_key: recalibrate_champion
+          environment_key: default
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-recalibrate
         - task_key: spark_udf_batch_score
+          depends_on:
+            - task_key: recalibrate_champion
+          environment_key: default
           python_wheel_task:
             package_name: grid_carbon_intensity_mlops
             entry_point: carbon-score
-          parameters: ["--mode", "databricks"]
+            parameters: ["--mode", "databricks"]

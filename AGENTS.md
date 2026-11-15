@@ -8,7 +8,7 @@
 
 ## Canonical Project Layout & Names
 - Root helper: `Makefile` (Linux CI) and `scripts/dev.ps1` (Windows PowerShell `test` / `run-local`).
-- Core package under `src/carbon_mlops/`: `config.py` (`CarbonMLOpsConfig`), `io/store.py` (`read_table`, `write_table`), `ingestion/ingest_entsoe.py`, `features/build_features.py` (`build_horizon_features`), `models/pyfunc_wrapper.py` (`ConformalCarbonForecaster` with explicit `pip_requirements`), `models/train.py`, `models/evaluate_gate.py`, `inference/batch_score.py`, `monitoring/compute_drift.py`, `viz/diagnostics.py` (`plot_probabilistic_forecast`), and `agent/{tools.py,qa_agent.py,eval_questions.json}`.
+- Core package under `src/carbon_mlops/`: `config.py` (`CarbonMLOpsConfig`), `io/store.py` (`read_table`, `write_table`), `ingestion/ingest_entsoe.py`, `features/build_features.py` (`build_horizon_features`), `models/pyfunc_wrapper.py` (`ConformalCarbonForecaster` with explicit `pip_requirements`), `models/train.py`, `models/conformal.py`, `models/evaluate_gate.py`, `jobs.py` (one entry point per Databricks task), `analysis/hypotheses.py`, `inference/batch_score.py`, `monitoring/compute_drift.py`, `viz/diagnostics.py` (`plot_probabilistic_forecast`), and `agent/{tools.py,qa_agent.py,eval_questions.json}`.
 - Databricks notebooks under `notebooks/` MUST start with `# Databricks notebook source` at line 1.
 
 ## Core MLOps & CQR Quality Gates (`G1–G4`)

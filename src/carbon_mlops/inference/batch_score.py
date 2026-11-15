@@ -9,13 +9,20 @@ from pathlib import Path
 import pandas as pd
 
 from carbon_mlops.config import CarbonMLOpsConfig
-from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS, build_horizon_features
+from carbon_mlops.features.build_features import (
+    CAUSAL_FEATURE_COLS,
+    FEATURE_TABLE,
+    build_horizon_features,
+)
 from carbon_mlops.ingestion.ingest_entsoe import ingest_bronze_snapshot
 from carbon_mlops.io.store import is_databricks_runtime, write_table
-from carbon_mlops.models.train import train_split_cqr
+from carbon_mlops.models.train import resolve_model_name, train_split_cqr
 from carbon_mlops.viz.diagnostics import plot_probabilistic_forecast
 
 logger = logging.getLogger(__name__)
+
+GOLD_TABLE = "gold_forecasts"
+EXPORT_VOLUME = "exports"
 
 
 def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
@@ -41,9 +48,10 @@ def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
 
     write_table(
         gold_df,
-        table_name=f"{cfg.schema}.gold_forecasts",
+        table_name=f"{cfg.schema}.{GOLD_TABLE}",
         mode="overwrite",
         base_dir=cfg.local_data_dir,
+        catalog=cfg.catalog,
     )
 
     cfg.dashboard_data_dir.mkdir(parents=True, exist_ok=True)
@@ -61,8 +69,24 @@ def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
     return gold_df
 
 
+def select_latest_complete_origins(features_df: pd.DataFrame, n_horizons: int) -> pd.DataFrame:
+    """Rows of the newest origin per zone that has every lead time.
+
+    Zones can end at different hours, and an origin with missing lead times would give a
+    forecast with holes, so the choice is made per zone among complete origins only.
+    """
+    size = features_df.groupby(["zone", "origin_timestamp"])["horizon_h"].transform("size")
+    complete = features_df[size == n_horizons]
+    latest = complete.groupby("zone")["origin_timestamp"].transform("max")
+    return (
+        complete[complete["origin_timestamp"] == latest]
+        .sort_values(["zone", "horizon_h"])
+        .reset_index(drop=True)
+    )
+
+
 def run_databricks_batch_scoring(cfg: CarbonMLOpsConfig | None = None) -> str:
-    """Score latest 24h origins on Databricks via @champion spark_udf -> gold_forecasts."""
+    """Score the newest complete origin per zone via @champion spark_udf -> gold_forecasts."""
     if not is_databricks_runtime():
         raise RuntimeError("run_databricks_batch_scoring requires a Databricks runtime.")
 
@@ -74,13 +98,18 @@ def run_databricks_batch_scoring(cfg: CarbonMLOpsConfig | None = None) -> str:
     spark = SparkSession.builder.getOrCreate()
     mlflow.set_registry_uri("databricks-uc")
 
-    model_uri = f"models:/{cfg.catalog}.{cfg.schema}.conformal_carbon_forecaster@champion"
-    feature_table = f"{cfg.catalog}.{cfg.schema}.grid_horizon_features"
-    gold_table = f"{cfg.catalog}.{cfg.schema}.gold_forecasts"
+    model_uri = f"models:/{resolve_model_name(cfg)}@champion"
+    feature_table = f"{cfg.catalog}.{cfg.schema}.{FEATURE_TABLE}"
+    gold_table = f"{cfg.catalog}.{cfg.schema}.{GOLD_TABLE}"
 
     sdf = spark.table(feature_table)
-    latest_ts = sdf.agg(F.max("origin_timestamp")).collect()
-    latest_sdf = sdf.filter(F.col("origin_timestamp") == latest_ts)
+    complete_origins = (
+        sdf.groupBy("zone", "origin_timestamp").count().filter(F.col("count") == len(cfg.horizons))
+    )
+    latest_origins = complete_origins.groupBy("zone").agg(
+        F.max("origin_timestamp").alias("origin_timestamp")
+    )
+    latest_sdf = sdf.join(latest_origins, on=["zone", "origin_timestamp"], how="inner")
 
     udf_cols = ["zone", *CAUSAL_FEATURE_COLS]
     cast_exprs = [
@@ -108,12 +137,19 @@ def run_databricks_batch_scoring(cfg: CarbonMLOpsConfig | None = None) -> str:
         .drop("pred")
     )
 
-    scored_sdf.write.format("delta").mode("overwrite").saveAsTable(gold_table)
+    scored_sdf.write.format("delta").mode("overwrite").option(
+        "overwriteSchema", "true"
+    ).saveAsTable(gold_table)
 
-    pdf = scored_sdf.toPandas()
-    cfg.dashboard_data_dir.mkdir(parents=True, exist_ok=True)
-    pdf.to_csv(cfg.dashboard_data_dir / "latest_24h_forecasts.csv", index=False)
-    logger.info("Scored %d rows into %s via %s", len(pdf), gold_table, model_uri)
+    # The job's working directory is ephemeral, so the BI extract goes to a Unity Catalog
+    # volume, where it can be downloaded for the Tableau packaged workbook.
+    spark.sql(f"CREATE VOLUME IF NOT EXISTS {cfg.catalog}.{cfg.schema}.{EXPORT_VOLUME}")
+    export_path = f"/Volumes/{cfg.catalog}/{cfg.schema}/{EXPORT_VOLUME}/latest_24h_forecasts.csv"
+    pdf = spark.table(gold_table).orderBy("zone", "horizon_h").toPandas()
+    pdf.to_csv(export_path, index=False)
+    logger.info(
+        "Scored %d rows into %s via %s; extract at %s", len(pdf), gold_table, model_uri, export_path
+    )
     return gold_table
 
 

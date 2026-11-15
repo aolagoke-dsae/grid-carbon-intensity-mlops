@@ -29,6 +29,11 @@ agent = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/carbon_mlops"]
 
+# A Databricks job has no repository checkout: ship the pinned Bronze snapshot in the wheel,
+# beside the code package so that model artifacts (which copy the code) stay small.
+[tool.hatch.build.targets.wheel.force-include]
+"data/bronze_snapshot/entsoe_generation_sample.parquet" = "carbon_mlops_data/entsoe_generation_sample.parquet"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -41,6 +46,9 @@ testpaths = ["tests"]
 pythonpath = ["src", "."]
 
 [project.scripts]
-carbon-ingest = "carbon_mlops.ingestion.ingest_entsoe:ingest_bronze_snapshot"
-carbon-features = "carbon_mlops.features.build_features:run_feature_pipeline"
-carbon-score = "carbon_mlops.inference.batch_score:main"
+carbon-ingest = "carbon_mlops.jobs:ingest_main"
+carbon-features = "carbon_mlops.jobs:features_main"
+carbon-train = "carbon_mlops.jobs:train_main"
+carbon-gate = "carbon_mlops.jobs:gate_main"
+carbon-recalibrate = "carbon_mlops.jobs:recalibrate_main"
+carbon-score = "carbon_mlops.jobs:score_main"
