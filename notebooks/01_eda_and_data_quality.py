@@ -33,7 +33,9 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
     for ax, (zone, color) in zip(axes, zone_styles, strict=True):
         vals = df.loc[df["zone"] == zone, "carbon_intensity_g_kwh"].dropna()
         q25, med, q75 = np.percentile(vals, [25, 50, 75])
-        ax.hist(vals, bins=45, alpha=0.65, density=True, color=color, edgecolor="white", linewidth=0.4)
+        ax.hist(
+            vals, bins=45, alpha=0.65, density=True, color=color, edgecolor="white", linewidth=0.4
+        )
         ax.axvline(med, color="#222222", linestyle="--", linewidth=1.5, label=f"Median: {med:.1f}")
         ax.axvspan(q25, q75, color=color, alpha=0.15, label=f"IQR: {q25:.1f}–{q75:.1f}")
         ax.set_title(f"{zone} Hourly Carbon Intensity (2024–2025)")
@@ -41,7 +43,9 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
         ax.set_ylabel("Probability Density")
         ax.legend(frameon=True, fontsize=9)
         ax.grid(alpha=0.25)
-    fig.suptitle("Regime Comparison: Variable Renewable/Fossil (DE-LU) vs. Nuclear Baseload (FR)", y=1.02)
+    fig.suptitle(
+        "Regime Comparison: Variable Renewable/Fossil (DE-LU) vs. Nuclear Baseload (FR)", y=1.02
+    )
     p1 = cfg.images_dir / "eda_zone_distributions.png"
     fig.tight_layout()
     fig.savefig(p1, bbox_inches="tight")
@@ -52,7 +56,9 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), dpi=150, sharey=True)
     for ax, zone in zip(axes, cfg.zones, strict=True):
         sub = df[df["zone"] == zone]
-        piv = sub.pivot_table(index="hour_utc", columns="month", values="carbon_intensity_g_kwh", aggfunc="median")
+        piv = sub.pivot_table(
+            index="hour_utc", columns="month", values="carbon_intensity_g_kwh", aggfunc="median"
+        )
         im = ax.imshow(piv.values, aspect="auto", origin="lower", cmap="YlOrRd")
         ax.set_title(f"{zone} Median Carbon Intensity (Hour x Month)")
         ax.set_xlabel("Month")
@@ -70,7 +76,11 @@ def generate_eda_diagnostics(cfg: CarbonMLOpsConfig | None = None) -> list[Path]
     fig, ax = plt.subplots(figsize=(9, 4.2), dpi=150)
     lags = np.arange(1, 73)
     for zone, color in zone_styles:
-        series = df.loc[df["zone"] == zone].sort_values("timestamp_utc")["carbon_intensity_g_kwh"].dropna()
+        series = (
+            df.loc[df["zone"] == zone]
+            .sort_values("timestamp_utc")["carbon_intensity_g_kwh"]
+            .dropna()
+        )
         acfs = [series.autocorr(lag=int(k)) for k in lags]
         ax.plot(lags, acfs, label=zone, color=color, linewidth=1.8)
     for mark in (24, 48, 72):

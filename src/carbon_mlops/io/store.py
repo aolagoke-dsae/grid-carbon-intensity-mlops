@@ -1,4 +1,4 @@
-﻿"""Unified Delta (Databricks) and Parquet (local/CI) storage adapter."""
+"""Unified Delta (Databricks) and Parquet (local/CI) storage adapter."""
 
 from __future__ import annotations
 

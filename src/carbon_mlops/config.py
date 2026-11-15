@@ -1,4 +1,4 @@
-﻿"""Centralized configuration for the 24-hour probabilistic grid carbon intensity pipeline."""
+"""Centralized configuration for the 24-hour probabilistic grid carbon intensity pipeline."""
 
 from __future__ import annotations
 
@@ -44,9 +44,7 @@ class CarbonMLOpsConfig:
     )
 
     # Grounded QA Agent LLM backend settings ("ollama" or "databricks")
-    llm_backend: str = field(
-        default_factory=lambda: os.getenv("CARBON_LLM_BACKEND", "ollama")
-    )
+    llm_backend: str = field(default_factory=lambda: os.getenv("CARBON_LLM_BACKEND", "ollama"))
     ollama_base_url: str = "http://localhost:11434/v1"
     ollama_model: str = "qwen3:8b"
 

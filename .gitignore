@@ -15,3 +15,5 @@ dist/
 !data/bronze_snapshot/
 !docs/images/
 !dashboards/data/
+
+data/lakehouse_local/
