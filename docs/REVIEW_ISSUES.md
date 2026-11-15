@@ -277,9 +277,13 @@ Run time of the test suite is now 11–13 s against the 15 s standard (47 tests)
 | G12 | Wheel entry points returned a DataFrame; a console entry point's return value becomes the exit status | `pyproject.toml`, new `jobs.py` | verified locally (pending CI) |
 | G13 | Model name was resolved differently in training and in the gate | `train.resolve_model_name` | verified locally (pending CI) |
 | G14 | The breakage audit's scratch copy lacked `databricks.yml`, so a bundle test would have failed on every breakage and made all of them look caught | `scripts/mutation_audit.py` | fixed; the audit now requires the untouched copy to pass first |
+| G15 | A wheel task has no default MLflow experiment, so `mlflow.start_run` failed on Databricks with "Could not find experiment with ID None" (found on the first workspace run; not foreseen) | `train.ensure_mlflow_experiment` | verified on the workspace: training job run `293770853415496` succeeds |
+| G16 | Gate-Val coverage differs slightly between platforms (local 0.8951 / 0.8899, Databricks 0.8941 / 0.8880) with identical data | `docs/DATABRICKS_VERIFICATION.md` | open: cause not verified; results are reproducible on the same platform only |
 
-Phase G state (2026-11-15). **No Databricks code path has been executed.** Phase G cannot be `done`
-until `docs/DATABRICKS_VERIFICATION.md` has been worked through on the workspace.
+Phase G state (2026-11-15). **The training job is verified on the workspace; the inference job has
+not been run.** Steps 1 to 5 of `docs/DATABRICKS_VERIFICATION.md` pass. Still unexecuted anywhere:
+scheduled recalibration against Unity Catalog, `spark_udf` scoring, the Gold table and the volume
+export. Phase G cannot be `done` until steps 7 to 12 pass.
 
 What changed:
 

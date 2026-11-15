@@ -1,8 +1,8 @@
 # Databricks Verification Checklist (Phase G)
 
-**Status: nothing in this document has been executed on a Databricks workspace.** The deployment
-code was written and checked locally. Each step below must be run on the Free Edition workspace
-and its result recorded here before Phase G can be called done.
+**Status (2026-11-15): in progress on the Free Edition workspace.** Steps 1 to 5 pass (step 3 on its
+second attempt, after one fix). Step 6 shows a small numerical difference from the local run. Steps 7
+to 12, the inference job, have not been run. Phase G is not done.
 
 ## What was verified locally, and what that does and does not show
 
@@ -43,12 +43,12 @@ Run from the repository root with the Databricks CLI authenticated against the w
 
 | # | Command or action | Expected result | Observed (fill in) |
 | :--- | :--- | :--- | :--- |
-| 1 | `databricks bundle validate -t dev` | No errors and no "unknown field" warnings | |
-| 2 | `databricks bundle deploy -t dev` | A wheel is built into `dist/` and two jobs appear in the workspace | |
-| 3 | `databricks bundle run -t dev carbon_training_pipeline` | Four tasks succeed in order: ingest, features, train, gate | |
-| 4 | In Catalog Explorer, open `workspace.carbon_mlops` | Tables `bronze_entsoe_hourly` (35,082 rows), `grid_horizon_training`, and `grid_horizon_features` with a primary key on `zone`, `origin_timestamp`, `horizon_h` | |
-| 5 | Open the registered model `workspace.carbon_mlops.conformal_carbon_forecaster` | Version 1 holds both `challenger` and `champion`; its tag `gate_decision` is `promoted` | |
-| 6 | Compare the gate task's log with the local run | Coverage DE-LU 0.8951 and FR 0.8899 on Gate-Val, as in `docs/REVIEW_ISSUES.md` | |
+| 1 | `databricks bundle validate -t dev` | No errors and no "unknown field" warnings | **Pass**, 2026-11-15, CLI v1.26.0: `Validation OK!`, no warnings |
+| 2 | `databricks bundle deploy -t dev` | A wheel is built into `dist/` and two jobs appear in the workspace | **Pass**, 2026-11-15: wheel built and uploaded, `Resources: 2 created`, 34 s |
+| 3 | `databricks bundle run -t dev carbon_training_pipeline` | Four tasks succeed in order: ingest, features, train, gate | **Pass on attempt 2**, run `293770853415496`: ingest 48 s, features 64 s, train 80 s, gate 39 s. Attempt 1 (run `261932530366971`) failed at train; see run log |
+| 4 | In Catalog Explorer, open `workspace.carbon_mlops` | Tables `bronze_entsoe_hourly` (35,082 rows), `grid_horizon_training`, and `grid_horizon_features` with a primary key on `zone`, `origin_timestamp`, `horizon_h` | **Pass on structure**, checked through the CLI: all three Delta tables exist; `grid_horizon_features` has constraint `grid_horizon_features_pk` on the three key columns, all `NOT NULL`, 24 columns, no target column. Row counts checked by SQL and equal to the local run: Bronze 17,543 (DE-LU) and 17,539 (FR); training table 839,904 rows of which 838,823 have a target; feature table 839,904 rows, all keys distinct |
+| 5 | Open the registered model `workspace.carbon_mlops.conformal_carbon_forecaster` | Version 1 holds both `challenger` and `champion`; its tag `gate_decision` is `promoted` | **Pass on aliases**: version 1 is `READY` and holds both aliases. The gate task logged "Promoted @challenger v1 to @champion". The tag itself was not confirmed: the CLI does not return model-version tags |
+| 6 | Compare the gate task's log with the local run | Coverage DE-LU 0.8951 and FR 0.8899 on Gate-Val, as in `docs/REVIEW_ISSUES.md` | **Close, not equal**: Databricks gives DE-LU 0.8941 and FR 0.8880. See "Numerical difference" below |
 | 7 | `databricks bundle run -t dev carbon_batch_inference` | Two tasks succeed: recalibrate, then score | |
 | 8 | Open the registered model again | Version 2 holds `champion`, with tags `recalibrated_from_version = 1` and `calibrated_through = 2025-12-31 23:00:00+00:00` | |
 | 9 | `SELECT zone, count(*), min(origin_timestamp) FROM workspace.carbon_mlops.gold_forecasts GROUP BY zone` | 24 rows per zone, origin `2025-12-31 22:00` for both | |
@@ -58,6 +58,77 @@ Run from the repository root with the Databricks CLI authenticated against the w
 
 If a step fails, record the error text in the "Observed" column before changing anything. The job
 schedule is paused by design: the snapshot is static, so a recurring run would rescore the same hours.
+
+## Run log
+
+### 2026-11-15, attempt 1 of the training job (run `261932530366971`)
+
+| Task | Result |
+| :--- | :--- |
+| `ingest_bronze` | SUCCESS, 87 s |
+| `materialize_uc_features` | SUCCESS, 75 s |
+| `train_challenger` | FAILED after one automatic retry |
+| `promotion_gate` | skipped (upstream failed) |
+
+Error, verbatim, raised by `mlflow.start_run` inside `train.register_forecaster`:
+
+```
+RestException: RESOURCE_DOES_NOT_EXIST: Could not find experiment with ID None.
+```
+
+Cause: a notebook has a default MLflow experiment, a wheel task does not, so `start_run` had no
+experiment to attach to. This was not among the ten assumptions listed above; it is an eleventh,
+unforeseen, failure. Model fitting itself completed before the error: the failure is at logging.
+
+Assumptions settled by this attempt:
+
+| # | Assumption | Outcome |
+| :--- | :--- | :--- |
+| 1 | `environment_version: "5"` is available on Free Edition | confirmed |
+| 2 | `./dist/*.whl` resolves relative to `databricks.yml` | confirmed |
+| 3 | The `pip wheel` build command works | confirmed |
+| 4 | The wheel's requirements install without clashing | confirmed for ingest, features and train (all imported and ran) |
+| 5 | `databricks-feature-engineering` as a dependency | confirmed (the feature client imported and ran) |
+| 6 | `create_table` accepts nullable key columns | confirmed: the table was created with `NOT NULL` keys and a primary key |
+| 7 | 840,000 rows from pandas to Spark in one call | confirmed |
+| 10 | `DATABRICKS_RUNTIME_VERSION` is set in serverless jobs | confirmed (the Delta branch ran) |
+| 8, 9 | `spark_udf` model loading; volume export | not reached |
+
+### 2026-11-15, fix and attempt 2 (run `293770853415496`)
+
+Fix: `train.ensure_mlflow_experiment` selects the experiment explicitly when running as a Databricks
+job (`/Users/<current user>/grid-carbon-intensity-mlops`, or `MLFLOW_EXPERIMENT_NAME` if set). It is
+covered by a unit test and a breakage-audit case (G15).
+
+| Task | Result |
+| :--- | :--- |
+| `ingest_bronze` | SUCCESS, 48 s |
+| `materialize_uc_features` | SUCCESS, 64 s |
+| `train_challenger` | SUCCESS, 80 s; registered `workspace.carbon_mlops.conformal_carbon_forecaster` v1 as `challenger` |
+| `promotion_gate` | SUCCESS, 39 s; promoted v1 to `champion` |
+
+This confirms, on the workspace: registration in the Unity Catalog model registry, loading the
+registered model back inside the gate task from the code stored with it, and the gate's re-scoring.
+
+### Numerical difference between Databricks and the local run
+
+| Gate-Val coverage | Local (Windows ARM, Python 3.14) | Databricks (Linux, Python 3.12) |
+| :--- | :--- | :--- |
+| DE-LU | 0.8951 | 0.8941 |
+| FR | 0.8899 | 0.8880 |
+
+The input data is identical: every row count above matches. The difference is therefore in model
+fitting. The likely cause is that gradient-boosted trees are not bit-identical across processor
+architectures and library builds, so a few split decisions differ. That explanation is plausible but
+**not verified**; the LightGBM, NumPy and pandas versions installed on serverless were not recorded.
+
+Consequences:
+
+- Both runs pass the gate, and the conclusion is the same.
+- The locked-test figures in `docs/LOCKED_TEST_RESULTS.md` are exact for the local environment and
+  reproduce there bit for bit. On another platform expect differences of about 0.1 to 0.2 percentage
+  points. This is far smaller than the bootstrap intervals (about plus or minus 3 points), but the
+  claim "reproducible" should be read as "reproducible on the same platform".
 
 ## GitHub Actions
 

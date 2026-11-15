@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -286,6 +287,31 @@ def resolve_model_name(cfg: CarbonMLOpsConfig) -> str:
     return REGISTERED_MODEL_BASENAME
 
 
+EXPERIMENT_ENV_VAR = "MLFLOW_EXPERIMENT_NAME"
+EXPERIMENT_BASENAME = "grid-carbon-intensity-mlops"
+
+
+def ensure_mlflow_experiment() -> str | None:
+    """Select the MLflow experiment explicitly when running as a Databricks job.
+
+    A notebook has a default experiment; a wheel task does not, and `mlflow.start_run` then
+    fails with "Could not find experiment with ID None". The experiment lives in the running
+    user's workspace folder unless MLFLOW_EXPERIMENT_NAME names another path. Locally MLflow's
+    own default experiment is used and nothing is changed. Returns the experiment name set.
+    """
+    if not is_databricks_runtime():
+        return None
+    name = os.environ.get(EXPERIMENT_ENV_VAR)
+    if not name:
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.getOrCreate()
+        user = spark.sql("SELECT current_user()").first()[0]
+        name = f"/Users/{user}/{EXPERIMENT_BASENAME}"
+    mlflow.set_experiment(name)
+    return name
+
+
 def load_registered_forecaster(model_name: str, alias: str) -> ConformalCarbonForecaster:
     """Load the registered model behind an alias and return the wrapped Python model."""
     if is_databricks_runtime():
@@ -333,6 +359,7 @@ def register_forecaster(
     signature = infer_signature(sample_in, sample_out)
     package_dir = Path(__file__).resolve().parents[1]
 
+    ensure_mlflow_experiment()
     with mlflow.start_run(run_name=run_name) as run:
         run_id = run.info.run_id
         mlflow.log_params(

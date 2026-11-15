@@ -173,3 +173,23 @@ def test_latest_complete_origin_is_chosen_per_zone() -> None:
     assert (
         latest.groupby("zone")["horizon_h"].apply(list).map(lambda h: h == list(range(1, 25))).all()
     )
+
+
+def test_databricks_jobs_select_an_mlflow_experiment_explicitly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from carbon_mlops.models import train
+
+    chosen: list[str] = []
+    monkeypatch.setattr(train.mlflow, "set_experiment", chosen.append)
+
+    # Locally MLflow's default experiment is left alone.
+    monkeypatch.setattr(train, "is_databricks_runtime", lambda: False)
+    assert train.ensure_mlflow_experiment() is None
+    assert chosen == []
+
+    # As a Databricks wheel task there is no default experiment, so one must be set.
+    monkeypatch.setattr(train, "is_databricks_runtime", lambda: True)
+    monkeypatch.setenv(train.EXPERIMENT_ENV_VAR, "/Users/someone/custom-experiment")
+    assert train.ensure_mlflow_experiment() == "/Users/someone/custom-experiment"
+    assert chosen == ["/Users/someone/custom-experiment"]

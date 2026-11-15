@@ -481,6 +481,13 @@ MUTATIONS: tuple[Mutation, ...] = (
         "entry_point: carbon-gate",
         "entry_point: carbon-evaluate",
     ),
+    Mutation(
+        "G15",
+        "no MLflow experiment selected when running as a Databricks job",
+        TRAIN,
+        "    mlflow.set_experiment(name)\n    return name",
+        "    return name",
+    ),
 )
 
 
