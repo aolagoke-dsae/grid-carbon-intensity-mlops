@@ -206,7 +206,7 @@ not yet wired into a Databricks job (G3).
 | F8 | H3 width is partly built from calibration offsets; test realized error instead | notebook | verified (pending CI): corrected test uses realized absolute error |
 | F9 | H3 uses only 00:00 origins, confounding lead time with time of day | notebook | verified (pending CI): corrected test averages over all 24 origin hours |
 | F10 | H3 permutation importance: no per-bucket models exist, and features correlate at 0.99 | notebook | verified (pending CI): grouped permutation importance with bootstrap intervals |
-| F11 | Locked test has been evaluated more than once; disclose it | README, `CONCEPT_NOTE.md` | verified (pending CI): disclosed in the plan, the concept note and the results document; root `README.md` still to be written (US-4.2) |
+| F11 | Locked test has been evaluated more than once; disclose it | README, `CONCEPT_NOTE.md` | verified (pending CI): disclosed in the plan, the concept note and the results document; root `README.md` written, with tests tying its numbers and links to the committed files |
 
 Phase F outcome (2026-11-15). The Locked Test was scored once with the frozen model, under the plan.
 

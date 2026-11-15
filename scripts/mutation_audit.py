@@ -42,8 +42,16 @@ JOBS = "src/carbon_mlops/jobs.py"
 SCORING = "src/carbon_mlops/inference/batch_score.py"
 BUNDLE = "databricks.yml"
 
-COPIED_PATHS: tuple[str, ...] = ("src", "tests", "data/bronze_snapshot")
-COPIED_FILES: tuple[str, ...] = ("pyproject.toml", "databricks.yml")
+COPIED_PATHS: tuple[str, ...] = (
+    "src",
+    "tests",
+    "scripts",
+    "notebooks",
+    "docs",
+    "data/bronze_snapshot",
+    "dashboards/data",
+)
+COPIED_FILES: tuple[str, ...] = ("pyproject.toml", "databricks.yml", "README.md", "Makefile")
 
 
 @dataclass(frozen=True)
