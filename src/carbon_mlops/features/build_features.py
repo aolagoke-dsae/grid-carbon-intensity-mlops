@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from carbon_mlops.config import CarbonMLOpsConfig
-from carbon_mlops.io.store import read_table, write_table
+from carbon_mlops.io.store import is_databricks_runtime, read_table, write_table
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +35,13 @@ CAUSAL_FEATURE_COLS: tuple[str, ...] = (
     "is_weekend",
 )
 
+FEATURE_PRIMARY_KEYS: list[str] = ["zone", "origin_timestamp", "horizon_h"]
+
 
 def _build_zone_origin_features(zone_df: pd.DataFrame) -> pd.DataFrame:
     """Compute strictly causal origin-state and backward-looking lag/rolling features per zone."""
     df = zone_df.sort_values("timestamp_utc").reset_index(drop=True).copy()
     df["origin_timestamp"] = pd.to_datetime(df["timestamp_utc"])
-    # Every backward-looking feature uses observations at or before origin_timestamp
     df["max_feature_timestamp"] = df["origin_timestamp"]
 
     ci = df["carbon_intensity_g_kwh"]
@@ -59,7 +60,6 @@ def _build_zone_origin_features(zone_df: pd.DataFrame) -> pd.DataFrame:
     df["fossil_share_origin"] = df["fossil_share"]
     df["gen_total_mwh_origin"] = df["gen_total_mwh"]
 
-    # Drop initial warmup rows lacking a full 24h lag
     df = df.dropna(subset=["ci_lag_24h", "carbon_intensity_origin"]).reset_index(drop=True)
     return df
 
@@ -116,7 +116,6 @@ def build_horizon_features(
             h_df["horizon_bucket"] = cfg.bucket_for_horizon(int(h))
             h_df["target_timestamp"] = h_df["origin_timestamp"] + pd.Timedelta(hours=int(h))
 
-            # Deterministic calendar encodings for target_timestamp (known at origin)
             target_hour = h_df["target_timestamp"].dt.hour
             h_df["target_hour_sin"] = np.sin(2.0 * np.pi * target_hour / 24.0)
             h_df["target_hour_cos"] = np.cos(2.0 * np.pi * target_hour / 24.0)
@@ -124,7 +123,6 @@ def build_horizon_features(
             h_df["target_month"] = h_df["target_timestamp"].dt.month
             h_df["is_weekend"] = (h_df["target_dow"] >= 5).astype(int)
 
-            # Left join realized future target (NaN for live inference horizons beyond data end)
             h_df = h_df.merge(target_lookup, on="target_timestamp", how="left")
             zone_frames.append(h_df)
 
@@ -134,7 +132,6 @@ def build_horizon_features(
         .reset_index(drop=True)
     )
 
-    # Enforce Gate G2 temporal invariants before persisting
     if (features_df["max_feature_timestamp"] > features_df["origin_timestamp"]).any():
         raise AssertionError("Gate G2 violation: max_feature_timestamp exceeds origin_timestamp")
     expected_target = features_df["origin_timestamp"] + pd.to_timedelta(
@@ -151,8 +148,51 @@ def build_horizon_features(
     return features_df
 
 
+def materialize_uc_feature_table(
+    features_df: pd.DataFrame,
+    cfg: CarbonMLOpsConfig | None = None,
+    base_dir: Path | None = None,
+) -> str:
+    """Register & merge causal features into Unity Catalog Feature Store (or local Parquet)."""
+    cfg = cfg or CarbonMLOpsConfig()
+    feature_only_df = features_df.drop(columns=["target_carbon_intensity"], errors="ignore").copy()
+
+    if is_databricks_runtime():
+        from databricks.feature_engineering import FeatureEngineeringClient
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.getOrCreate()
+        fe = FeatureEngineeringClient()
+        uc_table = f"{cfg.catalog}.{cfg.schema}.grid_horizon_features"
+        spark_df = spark.createDataFrame(feature_only_df)
+
+        if not spark.catalog.tableExists(uc_table):
+            fe.create_table(
+                name=uc_table,
+                primary_keys=FEATURE_PRIMARY_KEYS,
+                df=spark_df,
+                description="Causal 24h grid carbon intensity horizon features (DE-LU & FR).",
+            )
+        else:
+            fe.write_table(name=uc_table, df=spark_df, mode="merge")
+        logger.info(
+            "Merged %d causal feature rows into UC Feature Store %s", len(feature_only_df), uc_table
+        )
+        return uc_table
+
+    target_base = base_dir or cfg.local_data_dir
+    local_table = f"{cfg.schema}.grid_horizon_features_uc_offline"
+    written = write_table(
+        feature_only_df, table_name=local_table, mode="overwrite", base_dir=target_base
+    )
+    logger.info("Local offline mode: wrote UC feature snapshot to %s", written)
+    return written
+
+
 def run_feature_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
-    """Read Bronze table and materialize Silver horizon features."""
+    """Read Bronze table and materialize Silver & UC horizon features."""
     cfg = cfg or CarbonMLOpsConfig()
     bronze_df = read_table(f"{cfg.schema}.bronze_entsoe_hourly", base_dir=cfg.local_data_dir)
-    return build_horizon_features(bronze_df, cfg=cfg, write_output=True)
+    features_df = build_horizon_features(bronze_df, cfg=cfg, write_output=True)
+    materialize_uc_feature_table(features_df, cfg=cfg)
+    return features_df

@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 
 from carbon_mlops.config import CarbonMLOpsConfig
-from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS, build_horizon_features
+from carbon_mlops.features.build_features import (
+    CAUSAL_FEATURE_COLS,
+    build_horizon_features,
+    materialize_uc_feature_table,
+)
 
 
 def _make_synthetic_bronze(hours: int = 72) -> pd.DataFrame:
@@ -72,3 +76,15 @@ def test_gate_g2_temporal_invariants_and_lag_causality(tmp_path: Path) -> None:
         .reset_index(drop=True)
     )
     pd.testing.assert_frame_equal(orig_slice, pert_slice)
+
+
+def test_us21_materialize_uc_feature_table_offline_drops_target(tmp_path: Path) -> None:
+    cfg = CarbonMLOpsConfig()
+    bronze = _make_synthetic_bronze(hours=72)
+    features = build_horizon_features(bronze, cfg=cfg, write_output=False, base_dir=tmp_path)
+    out_path = materialize_uc_feature_table(features, cfg=cfg, base_dir=tmp_path)
+
+    saved = pd.read_parquet(out_path)
+    assert "target_carbon_intensity" not in saved.columns
+    for pk in ("zone", "origin_timestamp", "horizon_h"):
+        assert pk in saved.columns
