@@ -237,4 +237,4 @@ No licence file has been added to this repository yet.
 
 ## Author
 
-Dr. Adewole Olagoke. Capstone project, GreenBootcamps, December 2026.
+Dr. Adewole Olagoke.
