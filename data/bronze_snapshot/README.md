@@ -3,8 +3,9 @@
 - **File:** `entsoe_generation_sample.parquet`
 - **SHA-256 Checksum:** `c3dc7796be7589eb72c5363277057b164493f909f81500f982d4f3160eea34a9`
   (pinned in `src/carbon_mlops/config.py` as `bronze_snapshot_sha256`; ingestion fails on a mismatch)
-- **Source:** ENTSO-E Transparency Platform, actual generation per production type (A75), used with
-  the agreement of the data owners on the condition that the source is named (see the root `README.md`)
+- **Source:** ENTSO-E Transparency Platform; data: 50Hertz, Amprion, TenneT, TransnetBW (DE-LU) and
+  RTE (FR). Actual generation per production type (A75), used on the owners' terms, which require the
+  source to be named (see the root `README.md`). Intensity values are the author's computations
 - **Upstream Repository:** `grid-carbon-intensity` (`commit: 7caaee395e3303c5eea26c714645001b7dda01cd`)
 - **Built by:** `python scripts/export_bronze_snapshot.py --upstream-repo ../grid-carbon-intensity`
   from the upstream marts `exports/fact_generation.parquet` and `exports/fact_intensity.parquet`

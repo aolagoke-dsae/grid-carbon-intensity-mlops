@@ -10,8 +10,9 @@ can we be?*
 
 > **Read this first**
 >
-> - **The data comes from the ENTSO-E Transparency Platform** and is used with the agreement of its
->   owners, on the condition that the source is named. See [Data and licence](#data-and-licence).
+> - **Source of the data: ENTSO-E Transparency Platform; data: 50Hertz, Amprion, TenneT, TransnetBW
+>   (DE-LU) and RTE (FR).** It is used on the owners' terms, which require the source to be named.
+>   See [Data and licence](#data-and-licence).
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
 > - **Two planned parts are not built yet:** the Tableau dashboard and the QA agent.
@@ -206,25 +207,31 @@ Open limitations and every issue found in review are tracked in
 
 ## Data and licence
 
-**Source: ENTSO-E Transparency Platform** (actual generation per production type, document A75),
-for the bidding zones DE-LU and FR, 2024 to 2025. The upstream repository `grid-carbon-intensity`
-turns it into carbon intensity with life-cycle emission factors from IPCC AR5 WG3 Annex III and
-Itten et al. (2023). The snapshot in `data/bronze_snapshot/` is an hourly aggregate of that result.
+**Source: ENTSO-E Transparency Platform; data: 50Hertz, Amprion, TenneT, TransnetBW (DE-LU) and RTE (FR).**
 
-This data is not on ENTSO-E's list of data available for reuse, so its use rests on the agreement
-of the primary data owners:
+The data is the actual generation per production type (ENTSO-E document A75) for the bidding zones
+DE-LU and FR, 2024 to 2025. The upstream repository `grid-carbon-intensity` turns it into carbon
+intensity with life-cycle emission factors from IPCC AR5 WG3 Annex III and Itten et al. (2023). The
+snapshot in `data/bronze_snapshot/` is an hourly aggregate of that result.
 
-| Data | Owner | Agreement |
+**The carbon-intensity values, forecasts and all other figures here are the author's own
+computations.** They are not published, checked or endorsed by ENTSO-E, the transmission system
+operators or RTE.
+
+This data is not on ENTSO-E's list of data available for reuse, so its use rests on the terms of the
+primary data owners:
+
+| Data | Owner | Terms |
 | :--- | :--- | :--- |
-| DE-LU generation (A75) | The four German transmission system operators | Granted on 5 November 2026 under ENTSO-E's open-data licence, on the condition that the source is named (netztransparenz.de reference NTZ-CDVDPM8I; recorded in the upstream `RUNBOOK.md`, Checkpoint 10) |
-| FR generation (A75) | RTE | Granted. RTE's answer came after the upstream runbook's last revision and is not yet recorded there |
+| DE-LU generation (A75) | 50Hertz, Amprion, TenneT, TransnetBW | Use granted on 5 November 2026 under ENTSO-E's open-data licence, on the condition that the source is named (netztransparenz.de reference NTZ-CDVDPM8I). The source wording used above was confirmed the same day (reference NTZ-OI0Z6IUU) |
+| FR generation (A75) | RTE | Answer of 12 November 2026, referring to RTE's legal notices: reuse is permitted subject to the source being mentioned; changing or distorting the content is prohibited; the user alone is responsible for the use made of the data |
 
-No day-ahead price data and no load data is used or stored in this repository, so agreements still
-outstanding upstream for those (for example from JAO for prices) do not concern it.
+No day-ahead price data and no load data is used or stored in this repository. RTE's answer names
+JAO as the owner of the day-ahead prices; that question concerns the upstream repository only.
 
-Anyone reusing the snapshot or the extracts in `dashboards/data/` must name the ENTSO-E Transparency
-Platform as the source, as this repository does. This is a statement of the situation as the author
-has documented it, not legal advice.
+Anyone reusing the snapshot or the extracts in `dashboards/data/` must name the source as above and
+is bound by the same terms. This is a statement of the situation as the author has documented it,
+not legal advice.
 
 **The code is MIT-licensed** (see [LICENSE](LICENSE)): use it, change it, ship it, and keep the notice.
 That licence covers the code and documentation only. It does not and cannot cover the data in
