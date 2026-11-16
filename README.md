@@ -10,8 +10,8 @@ can we be?*
 
 > **Read this first**
 >
-> - **The repository is private and should stay private for now.** It contains an hourly dataset
->   derived from ENTSO-E data that is not on ENTSO-E's open-reuse list. See [Data and licence](#data-and-licence).
+> - **The data comes from the ENTSO-E Transparency Platform** and is used with the agreement of its
+>   owners, on the condition that the source is named. See [Data and licence](#data-and-licence).
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
 > - **Two planned parts are not built yet:** the Tableau dashboard and the QA agent.
@@ -206,22 +206,27 @@ Open limitations and every issue found in review are tracked in
 
 ## Data and licence
 
-The snapshot in `data/bronze_snapshot/` is derived from ENTSO-E Transparency Platform data
-(generation per production type), processed by the upstream repository with life-cycle emission
-factors from IPCC AR5 and Itten et al. (2023). Source: ENTSO-E Transparency Platform.
+**Source: ENTSO-E Transparency Platform** (actual generation per production type, document A75),
+for the bidding zones DE-LU and FR, 2024 to 2025. The upstream repository `grid-carbon-intensity`
+turns it into carbon intensity with life-cycle emission factors from IPCC AR5 WG3 Annex III and
+Itten et al. (2023). The snapshot in `data/bronze_snapshot/` is an hourly aggregate of that result.
 
-**That data is not on ENTSO-E's list of data available for reuse.** The upstream repository
-therefore does not redistribute it, and records that publishing results derived from it awaits the
-agreement of the data owners (RTE and the German transmission system operators). This repository
-commits an hourly aggregate of the same data, ships it inside the wheel, and writes forecasts based
-on it. Until the owners' position is known:
+This data is not on ENTSO-E's list of data available for reuse, so its use rests on the agreement
+of the primary data owners:
 
-- keep this repository private;
-- do not publish the snapshot, the extracts in `dashboards/data/`, or a public dashboard built on them.
+| Data | Owner | Agreement |
+| :--- | :--- | :--- |
+| DE-LU generation (A75) | The four German transmission system operators | Granted on 5 November 2026 under ENTSO-E's open-data licence, on the condition that the source is named (netztransparenz.de reference NTZ-CDVDPM8I; recorded in the upstream `RUNBOOK.md`, Checkpoint 10) |
+| FR generation (A75) | RTE | Granted. RTE's answer came after the upstream runbook's last revision and is not yet recorded there |
 
-This is a statement of the situation as documented upstream, not legal advice.
+No day-ahead price data and no load data is used or stored in this repository, so agreements still
+outstanding upstream for those (for example from JAO for prices) do not concern it.
 
-No licence file has been added to this repository yet.
+Anyone reusing the snapshot or the extracts in `dashboards/data/` must name the ENTSO-E Transparency
+Platform as the source, as this repository does. This is a statement of the situation as the author
+has documented it, not legal advice.
+
+No licence file has been added to this repository yet, so the code is not licensed for reuse.
 
 ## Documentation
 

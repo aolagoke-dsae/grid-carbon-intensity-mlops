@@ -29,7 +29,7 @@ Gate-Val: DE-LU 92.46%, FR 87.37%, pooled 89.92%.
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
 | A1 | Bare `pytest` fails at collection (`No module named 'tests'`) | `tests/test_pyfunc_contract.py:17`, `ci_cd.yml` | done |
-| A2 | No git remote; CI has never run | repo | done (private GitHub remote; CI green) |
+| A2 | No git remote; CI has never run | repo | done (GitHub remote; CI green) |
 | A3 | `bundle validate` uses a dummy host/token and cannot pass | `ci_cd.yml` | done |
 | A4 | `pytest`, `ruff`, `openai` are runtime dependencies | `pyproject.toml` | done |
 | A5 | `Makefile` and `dev.ps1` lint different paths than CI (`notebooks` missing) | `Makefile`, `scripts/dev.ps1` | done |
