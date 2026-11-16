@@ -226,7 +226,9 @@ Anyone reusing the snapshot or the extracts in `dashboards/data/` must name the 
 Platform as the source, as this repository does. This is a statement of the situation as the author
 has documented it, not legal advice.
 
-No licence file has been added to this repository yet, so the code is not licensed for reuse.
+**The code is MIT-licensed** (see [LICENSE](LICENSE)): use it, change it, ship it, and keep the notice.
+That licence covers the code and documentation only. It does not and cannot cover the data in
+`data/bronze_snapshot/` and `dashboards/data/`, whose reuse is governed by the owners' terms above.
 
 ## Documentation
 

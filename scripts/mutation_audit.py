@@ -52,7 +52,13 @@ COPIED_PATHS: tuple[str, ...] = (
     "data/bronze_snapshot",
     "dashboards/data",
 )
-COPIED_FILES: tuple[str, ...] = ("pyproject.toml", "databricks.yml", "README.md", "Makefile")
+COPIED_FILES: tuple[str, ...] = (
+    "pyproject.toml",
+    "databricks.yml",
+    "README.md",
+    "Makefile",
+    "LICENSE",
+)
 
 
 @dataclass(frozen=True)
