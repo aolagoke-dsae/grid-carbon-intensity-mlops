@@ -1,7 +1,7 @@
 ﻿# Concept Note: 24-Hour Probabilistic Grid Carbon Intensity Forecasting & MLOps Pipeline (`DE-LU` & `FR`)
 
 - **Author:** Dr. Adewole Olagoke (`@aolagoke-dsae`)
-- **Target Presentation:** GreenBootcamps Capstone Defense — December 11, 2026 (Code Freeze: December 8, 2026)
+- **Target Presentation:** December 11, 2026 (Code Freeze: December 8, 2026)
 - **Delivery Methodology:** Scrum-Adapted 4-Sprint Iterative Plan (Nov 15 – Dec 10, 2026)
 - **Platform & Stack:** Databricks (Unity Catalog, Feature Engineering, MLflow Registry & Tracing, Asset Bundles), LightGBM + Split Conformalized Quantile Regression (CQR), Tableau Public (packaged extract), GitHub Actions
 
@@ -76,4 +76,4 @@ All hypotheses concern empirical physical properties of the `DE-LU` and `FR` ele
 * **Epic 1 (`Sprint 1`):** Walking Skeleton — Bronze snapshot ingestion, leakage-free horizon features, Split-CQR baseline, and EDA diagnostics.
 * **Epic 2 (`Sprint 2`):** Lakehouse Governance & CI/CD — Unity Catalog Feature Store, `@champion` promotion gate on Gate-Val, Spark UDF batch scoring, DAB, and GitHub Actions.
 * **Epic 3 (`Sprint 3`):** Empirical Validation & BI — Formal `H1–H3` hypothesis testing on Locked Test, PSI/coverage drift monitoring, and packaged Tableau Public dashboard.
-* **Epic 4 (`Sprint 4`):** Grounded Agentic QA & Defense — Tool-calling QA Copilot with MLflow Tracing, Dec 8 code freeze, and Dec 11 GreenBootcamps rehearsal.
+* **Epic 4 (`Sprint 4`):** Grounded Agentic QA & Defense — Tool-calling QA Copilot with MLflow Tracing, Dec 8 code freeze, and Dec 11 presentation rehearsal.

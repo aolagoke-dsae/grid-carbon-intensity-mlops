@@ -70,7 +70,7 @@ This plan organizes delivery into **four 1-week Sprints**. Every Sprint delivers
 ---
 
 ## Sprint 4 (Dec 6 – Dec 10): Grounded Agentic QA Copilot, Code Freeze & Rehearsal
-**Sprint Goal:** Ship the zero-hallucination QA Copilot with MLflow Tracing, enforce a hard code freeze on **December 8**, and rehearse the **December 11 GreenBootcamps** presentation.
+**Sprint Goal:** Ship the zero-hallucination QA Copilot with MLflow Tracing, enforce a hard code freeze on **December 8**, and rehearse the **December 11** presentation.
 
 ### Sprint 4 Backlog
 * **US-4.1 — Grounded Grid & MLOps QA Copilot (`Gate G4`):**
