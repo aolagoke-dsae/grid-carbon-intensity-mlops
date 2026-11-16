@@ -68,3 +68,19 @@ def test_readme_links_and_commands_point_at_things_that_exist() -> None:
     for task in ("test", "run-local", "audit", "monitor"):
         assert f'"{task}"' in runner, task
         assert f"{task}:" in makefile, task
+
+
+def test_recorded_plan_commit_matches_the_notebook_constant() -> None:
+    import json
+
+    record = json.loads(
+        (REPO_ROOT / "dashboards/data/locked_test_run.json").read_text(encoding="utf-8")
+    )
+    notebook = (REPO_ROOT / "notebooks/02_cqr_calibration_analysis.py").read_text(encoding="utf-8")
+    constant = re.search(r'ANALYSIS_PLAN_COMMIT = "([0-9a-f]{40})"', notebook)
+    assert constant is not None
+    assert record["analysis_plan_commit"] == constant.group(1)
+    # The write-up and the rewrite note cite the same commit by its short ID.
+    short = constant.group(1)[:7]
+    assert f"`{short}`" in (REPO_ROOT / "docs/LOCKED_TEST_RESULTS.md").read_text(encoding="utf-8")
+    assert f"`{short}`" in (REPO_ROOT / "docs/HISTORY_REWRITE.md").read_text(encoding="utf-8")

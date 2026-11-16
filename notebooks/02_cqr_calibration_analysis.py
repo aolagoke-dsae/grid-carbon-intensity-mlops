@@ -49,7 +49,7 @@ from carbon_mlops.viz.diagnostics import plot_coverage_by_horizon
 logger = logging.getLogger("locked_test_analysis")
 
 # Commit of docs/ANALYSIS_PLAN_H1_H3.md that was approved before this notebook existed.
-ANALYSIS_PLAN_COMMIT = "23bf83d60fd3918614d4d74b4d8fc56a1456cb55"
+ANALYSIS_PLAN_COMMIT = "6c8e73032a5107c61ae5d6cbf06069b22e27fdb9"
 
 CALIBRATION_CSV = "locked_test_calibration.csv"
 RESULTS_CSV = "hypothesis_results.csv"

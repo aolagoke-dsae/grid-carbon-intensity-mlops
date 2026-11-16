@@ -1,5 +1,5 @@
 {
-  "analysis_plan_commit": "23bf83d60fd3918614d4d74b4d8fc56a1456cb55",
+  "analysis_plan_commit": "6c8e73032a5107c61ae5d6cbf06069b22e27fdb9",
   "bronze_snapshot_sha256": "c3dc7796be7589eb72c5363277057b164493f909f81500f982d4f3160eea34a9",
   "evaluation_split": "locked_test",
   "first_origin_utc": "2025-09-13 10:00:00+00:00",

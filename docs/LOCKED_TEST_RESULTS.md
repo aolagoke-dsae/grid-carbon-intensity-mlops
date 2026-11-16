@@ -5,7 +5,7 @@ and `dashboards/data/locked_test_run.json`. Every number below is read from thos
 
 ## How to read this
 
-- **Plan:** `docs/ANALYSIS_PLAN_H1_H3.md`, commit `23bf83d`, approved and pushed before the run.
+- **Plan:** `docs/ANALYSIS_PLAN_H1_H3.md`, commit `6c8e730`, approved and pushed before the run.
 - **Run:** one execution of `notebooks/02_cqr_calibration_analysis.py --run` on 2026-11-15, then `--check`,
   which recomputed everything and reproduced the files exactly.
 - **Period:** origins `2025-09-13 10:00` to `2025-12-31 21:00` UTC, 124,955 forecast rows,

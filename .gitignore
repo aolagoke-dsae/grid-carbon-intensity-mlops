@@ -20,3 +20,6 @@ data/lakehouse_local/
 
 # Local review bundle (derived dump of the repo)
 _repo_review_bundle.txt
+
+# Local backup of the original history (see docs/HISTORY_REWRITE.md); never pushed
+backups/
