@@ -91,3 +91,10 @@ resources:
             package_name: grid_carbon_intensity_mlops
             entry_point: carbon-score
             parameters: ["--mode", "databricks"]
+        - task_key: compute_monitoring
+          depends_on:
+            - task_key: recalibrate_champion
+          environment_key: default
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-monitor

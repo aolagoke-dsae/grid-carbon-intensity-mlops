@@ -41,6 +41,7 @@ STORE = "src/carbon_mlops/io/store.py"
 JOBS = "src/carbon_mlops/jobs.py"
 SCORING = "src/carbon_mlops/inference/batch_score.py"
 BUNDLE = "databricks.yml"
+MONITORING = "src/carbon_mlops/monitoring/compute_drift.py"
 
 COPIED_PATHS: tuple[str, ...] = (
     "src",
@@ -495,6 +496,66 @@ MUTATIONS: tuple[Mutation, ...] = (
         TRAIN,
         "    mlflow.set_experiment(name)\n    return name",
         "    return name",
+    ),
+    Mutation(
+        "M1",
+        "PSI log ratio inverted",
+        MONITORING,
+        "np.log(cur_share / ref_share)",
+        "np.log(ref_share / cur_share)",
+    ),
+    Mutation(
+        "M1",
+        "PSI reference includes data after the Train period",
+        MONITORING,
+        "train = zone_origins[when <= reference_end]",
+        "train = zone_origins",
+    ),
+    Mutation(
+        "M1",
+        "PSI counts each origin once per lead time",
+        MONITORING,
+        'return features_df.drop_duplicates(subset=["zone", "origin_timestamp"])[',
+        "return features_df[",
+    ),
+    Mutation(
+        "M1",
+        "same-season PSI reported from an incomplete reference window",
+        MONITORING,
+        "season_usable = len(same_season) >= min_seasonal_rows",
+        "season_usable = True",
+    ),
+    Mutation(
+        "M2",
+        "coverage window selected by origin instead of observed target",
+        MONITORING,
+        'in_window = (zone_rows["target_timestamp"] >= date - pd.Timedelta(days=window_days)) & (\n'
+        '                zone_rows["target_timestamp"] < date\n'
+        "            )",
+        'in_window = (zone_rows["origin_timestamp"] >= date - pd.Timedelta(days=window_days)) & (\n'
+        '                zone_rows["origin_timestamp"] < date\n'
+        "            )",
+    ),
+    Mutation(
+        "M2",
+        "coverage ignores the upper interval bound",
+        MONITORING,
+        'covered=(y >= preds_df["p05"].to_numpy()) & (y <= preds_df["p95"].to_numpy()),',
+        'covered=(y >= preds_df["p05"].to_numpy()),',
+    ),
+    Mutation(
+        "M2",
+        "coverage below the band reported as ok",
+        MONITORING,
+        '        return "below_band"',
+        '        return "ok"',
+    ),
+    Mutation(
+        "M2",
+        "skill against persistence inverted",
+        MONITORING,
+        "skill = 1.0 - model_loss / baseline_loss if baseline_loss > 0",
+        "skill = 1.0 - baseline_loss / model_loss if baseline_loss > 0",
     ),
 )
 

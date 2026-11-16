@@ -14,7 +14,7 @@ can we be?*
 >   derived from ENTSO-E data that is not on ENTSO-E's open-reuse list. See [Data and licence](#data-and-licence).
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
-> - **Three planned parts are not built yet:** drift monitoring, the Tableau dashboard and the QA agent.
+> - **Two planned parts are not built yet:** the Tableau dashboard and the QA agent.
 
 ## Results at a glance
 
@@ -111,6 +111,7 @@ pip install -e ".[dev]"
 | :--- | :--- | :--- |
 | Lint and test | `.\scripts\dev.ps1 test` | `make test` |
 | Run the pipeline locally | `.\scripts\dev.ps1 run-local` | `make run-local` |
+| Compute drift and coverage monitoring | `.\scripts\dev.ps1 monitor` | `make monitor` |
 | Run the breakage audit (several minutes) | `.\scripts\dev.ps1 audit` | `make audit` |
 
 The local pipeline ingests the snapshot, builds features, trains, evaluates on Gate-Val and writes
@@ -132,7 +133,7 @@ Two Serverless jobs are defined in `databricks.yml` and run from a wheel built f
 | Job | Tasks |
 | :--- | :--- |
 | `carbon_training_pipeline` | ingest, features, train, gate |
-| `carbon_batch_inference` | recalibrate the champion, then score with a Spark UDF |
+| `carbon_batch_inference` | recalibrate the champion, then score with a Spark UDF and compute monitoring |
 
 ```bash
 databricks bundle deploy -t dev
@@ -140,7 +141,8 @@ databricks bundle run -t dev carbon_training_pipeline
 databricks bundle run -t dev carbon_batch_inference
 ```
 
-Both jobs were run end to end on a Databricks Free Edition workspace on 15 November 2026. The steps,
+Both jobs were run end to end on a Databricks Free Edition workspace on 15 November 2026, before the
+monitoring task was added; that task has not run on Databricks yet. The steps,
 observed results, and what remains unverified are in
 [docs/DATABRICKS_VERIFICATION.md](docs/DATABRICKS_VERIFICATION.md). The inference schedule is paused
 on purpose: the snapshot is static, so a recurring run would rescore the same hours.
@@ -157,6 +159,30 @@ on purpose: the snapshot is static, so a recurring run would rescore the same ho
 | `dashboards/data/` | Forecast extract, calibration table, hypothesis results, run record |
 | `docs/` | Concept note, plans, results, the review register |
 
+## Monitoring
+
+`monitoring/compute_drift.py` writes `dashboards/data/gold_monitoring.csv`, one row per weekly
+monitoring date, zone and metric, from July to December 2025:
+
+- **Rolling 7-day coverage** per zone and per horizon bucket, with the share of misses on each side,
+  the mean interval width, and the median's skill against "no change from now".
+- **Feature drift** as a population stability index over the trailing 30 days, against the whole
+  training period and against the same 30 days one year earlier.
+
+How to read it:
+
+- **Weekly coverage is noisy.** A week holds a few thousand strongly correlated forecasts, so single
+  weeks outside the 87% to 96% band are expected. A run of them is the signal.
+- **The drift thresholds (0.10 and 0.25) are conventions for independent samples.** A month of
+  hourly grid data is far from independent, so the index is high much of the time. Compare zones and
+  features with each other; do not read a single "alert" as proof of a structural change.
+- **Skill against persistence falls from summer to winter.** With one year of data this cannot be
+  separated into season (persistence is a weak baseline when solar drives a daily cycle) and model
+  age (the base models are fitted once and only their calibration is refreshed).
+
+The monitor replays the forecasts the weekly recalibration would have issued. It tunes nothing and
+changes no model.
+
 ## Reproducibility
 
 - **Same platform: exact.** The held-out results reproduce bit for bit on the machine that produced
@@ -171,7 +197,6 @@ on purpose: the snapshot is static, so a recurring run would rescore the same ho
 
 | Planned | Status |
 | :--- | :--- |
-| Drift and coverage monitoring (`monitoring/compute_drift.py`) | Not started |
 | Tableau dashboard | Not started; its input files exist in `dashboards/data/` |
 | Grounded QA agent (`agent/`) and gate G4 | Not started |
 | Day-ahead prices, load and flows as features | Deferred; the snapshot does not export them |

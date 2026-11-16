@@ -317,6 +317,35 @@ Verification state at commit `2da4336` (2026-11-15, on mains power):
 The test suite takes 45 to 60 s when the laptop is on battery with the processor throttled. That is
 an effect of the machine's power state, not of the code: the same suite runs in 11 s on mains.
 
+## Monitoring (US-3.2), added 2026-11-16
+
+New work, not part of the original review. Status follows the same three-state rule.
+
+| ID | Item | Where | Status |
+| :--- | :--- | :--- | :--- |
+| M1 | Feature drift: PSI per zone and feature, trailing 30 days against Train and against the same 30 days a year earlier | `monitoring/compute_drift.py` | verified locally (pending CI) |
+| M2 | Rolling 7-day coverage per zone and horizon bucket, miss direction, width, skill against persistence | `monitoring/compute_drift.py` | verified locally (pending CI) |
+| M3 | Monitoring task in the Databricks inference job (`carbon-monitor`) | `jobs.py`, `databricks.yml` | implemented; bundle consistency tested; **not deployed, never run on the workspace** |
+| M4 | PSI against the whole Train period is high almost always (321 of 468 values at alert), because a 30-day window against 14 months mostly measures the season | design | addressed by adding the same-season reference; the original measure is kept because the sprint plan specifies it |
+| M5 | Same-season PSI is still at alert in 249 of 468 values. The 0.10 / 0.25 thresholds assume independent samples; a month of hourly data is strongly autocorrelated | design | open limitation, documented in the README; thresholds deliberately not retuned |
+| M6 | Skill against persistence falls from about 0.6 (DE-LU) and 0.4 (FR) in July to about 0.05 and 0.2 in December, with three negative weeks. Season and model age cannot be separated with one year of data. Base models are never refitted, only recalibrated | finding | open: no retraining schedule exists |
+
+Verification (2026-11-16): 10 unit tests with hand-computed answers; lint clean; 67 tests in about
+12.7 s. Breakage audit: the full 67-case run caught 66; the survivor ("coverage ignores the upper
+interval bound") showed that the synthetic forecasts only ever missed on the low side. A test with
+misses above the interval was added and the 8 monitoring cases were re-run: 8 of 8 caught. The other
+59 cases were not re-run after that, since adding a test cannot stop an existing test from failing.
+
+The monitored period includes the held-out test period, by the author's decision of 2026-11-16. It
+recomputes forecasts already published in `docs/LOCKED_TEST_RESULTS.md` and is used for reporting only.
+
+What the first real output shows (`dashboards/data/gold_monitoring.csv`, 26 weekly dates, 1,352 rows):
+
+- Weekly coverage is outside the band in 10 of 26 weeks for DE-LU and 14 of 26 for FR; both zones are
+  below it in the same week five times; the longest run of consecutive below-band weeks is 3 in each zone.
+- FR drifts more than DE-LU year on year: its intensity, fossil share and 24-hour mean are at alert
+  in 88% to 96% of weeks, against 35% to 85% for the same DE-LU features.
+
 ## Dependencies
 
 - B before D: fixing lags and partial hours changes the training data.

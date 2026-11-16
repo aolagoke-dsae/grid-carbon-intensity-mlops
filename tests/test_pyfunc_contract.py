@@ -12,7 +12,12 @@ from mlflow.tracking import MlflowClient
 
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import CAUSAL_FEATURE_COLS, build_horizon_features
-from carbon_mlops.jobs import run_gate_job, run_recalibration_job, run_training_job
+from carbon_mlops.jobs import (
+    run_gate_job,
+    run_monitoring_job,
+    run_recalibration_job,
+    run_training_job,
+)
 from carbon_mlops.models.conformal import (
     add_conformity_scores,
     calibrate_offsets,
@@ -345,6 +350,15 @@ def test_us22_mlflow_registry_and_champion_promotion_gate(tmp_path: Path) -> Non
     assert len(recalibrated.conformal_offsets) == len(cfg.zones) * len(cfg.horizons)
     assert recalibrated.conformal_offsets != artifacts.forecaster.conformal_offsets
     assert recalibrated.calibrated_through == str(newest)
+    # ---- Monitoring of the champion (the inference job's monitoring task) ----
+    monitor_cfg = CarbonMLOpsConfig(local_data_dir=tmp_path, dashboard_data_dir=tmp_path / "dash")
+    monitoring_csv = Path(run_monitoring_job(cfg=monitor_cfg, features_df=feats))
+    assert monitoring_csv == tmp_path / "dash" / "gold_monitoring.csv"
+    assert monitoring_csv.exists()
+    # Twenty days of data hold no full weekly window after Gate-Val starts: an empty table,
+    # not an error.
+    assert list(pd.read_csv(monitoring_csv).columns)[:3] == ["monitor_date", "zone", "metric_group"]
+
     # The rejected challenger keeps its alias and never became the recalibrated champion.
     challenger_mv = client.get_model_version_by_alias(model_name, "challenger")
     assert str(challenger_mv.version) == str(artifacts_bad.model_version)

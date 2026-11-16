@@ -7,7 +7,7 @@ because a console entry point's return value is used as the process exit status.
 
 Task order on Databricks:
     carbon_training_pipeline:  ingest -> features -> train -> gate
-    carbon_batch_inference:    recalibrate -> score
+    carbon_batch_inference:    recalibrate -> score, monitor
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from carbon_mlops.models.train import (
     resolve_model_name,
     train_split_cqr,
 )
+from carbon_mlops.monitoring.compute_drift import compute_monitoring, write_monitoring
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,22 @@ def run_recalibration_job(
     return new_version
 
 
+def run_monitoring_job(
+    cfg: CarbonMLOpsConfig | None = None,
+    features_df: pd.DataFrame | None = None,
+) -> str:
+    """Compute feature drift and rolling coverage for @champion and write `gold_monitoring`.
+
+    Uses the champion's base models and replays the recalibration schedule, so the coverage
+    it reports is that of the forecasts the schedule would have issued. Returns the location
+    of the CSV extract.
+    """
+    cfg = cfg or CarbonMLOpsConfig()
+    features = features_df if features_df is not None else read_training_table(cfg)
+    champion = load_registered_forecaster(resolve_model_name(cfg), "champion")
+    return write_monitoring(compute_monitoring(champion, features, cfg), cfg)
+
+
 def ingest_main() -> None:
     _configure_logging()
     ingest_bronze_snapshot()
@@ -155,6 +172,11 @@ def gate_main() -> None:
 def recalibrate_main() -> None:
     _configure_logging()
     run_recalibration_job()
+
+
+def monitor_main() -> None:
+    _configure_logging()
+    run_monitoring_job()
 
 
 def score_main() -> None:

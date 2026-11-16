@@ -51,6 +51,7 @@ def test_every_wheel_entry_point_resolves_to_a_no_argument_function() -> None:
         "carbon-gate",
         "carbon-recalibrate",
         "carbon-score",
+        "carbon-monitor",
     }
     for name, target in scripts.items():
         module_name, function_name = target.split(":")

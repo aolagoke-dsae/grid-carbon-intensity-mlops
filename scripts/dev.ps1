@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("test", "audit", "run-local", "deploy")]
+    [ValidateSet("test", "audit", "run-local", "monitor", "deploy")]
     [string]$Task = "test"
 )
 
@@ -19,6 +19,9 @@ switch ($Task) {
     }
     "run-local" {
         python -m carbon_mlops.inference.batch_score --mode local
+    }
+    "monitor" {
+        python -m carbon_mlops.monitoring.compute_drift
     }
     "deploy" {
         databricks bundle deploy -t dev
