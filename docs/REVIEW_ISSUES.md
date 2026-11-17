@@ -371,9 +371,9 @@ and 9.5% for "repeat yesterday's cleanest hours" and 25.4% and 18.7% in hindsigh
 
 | ID | Item | Where | Status |
 | :--- | :--- | :--- | :--- |
-| W6 | Outcome in decision units: CO2 avoided per MWh moved for every candidate window; per strategy the mean and total avoided, the share of days the choice was dirtier than the day's average, the worst day, and the share of hindsight's value captured | `inference/dashboard_extracts.py` | verified locally (pending CI) |
-| W7 | Weekly value per strategy (`window_value_weekly.csv`, `gold_window_value_weekly`), to set beside weekly skill | `inference/dashboard_extracts.py` | verified locally (pending CI); **the workspace tables still have the old columns until the next deploy and run** |
-| W8 | The "cautious" strategy (choose by the upper bound) does not beat the median: in DE-LU it avoids 63.5 against 66.2 kg per MWh and is dirtier than the day's average on 12.6% of days against 6.8% | `dashboards/data/window_strategy_summary.csv` | finding, open. The interval is not shown to improve the choice of window; stated in the README |
+| W6 | Outcome in decision units: CO2 avoided per MWh moved for every candidate window; per strategy the mean and total avoided, the share of days the choice was dirtier than the day's average, the worst day, and the share of hindsight's value captured | `inference/dashboard_extracts.py` | verified on the workspace 2026-11-17 (same run as W7) |
+| W7 | Weekly value per strategy (`window_value_weekly.csv`, `gold_window_value_weekly`), to set beside weekly skill | `inference/dashboard_extracts.py` | verified on the workspace 2026-11-17 (run `466275646757399`); see `docs/DATABRICKS_VERIFICATION.md` |
+| W8 | The "cautious" strategy (choose by the upper bound) does not beat the median: in DE-LU it avoids 63.5 against 66.2 kg per MWh and is dirtier than the day's average on 12.6% of days against 6.8% | `dashboards/data/window_strategy_summary.csv` | finding, open. The interval is not shown to improve the choice of window; stated in the README. Reproduced with the workspace model (61.4 against 67.4 kg; 13.6% against 6.8%) |
 
 Held-out period, 3-hour window, 103 days: the median strategy avoided 66.2 kg CO2 per MWh moved in
 DE-LU and 5.2 in FR (yesterday rule: 46.6 and 3.4; hindsight: 89.2 and 6.7), captured 74% and 77% of

@@ -267,6 +267,38 @@ All numeric values in the forecast history, the monitoring table and the strateg
 identical to those of the previous workspace run, as expected: version 6 has the same base models
 as version 5 and was recalibrated on the same window. G17 is unchanged.
 
+### 2026-11-17, fifth inference run, with the business-value columns (run `466275646757399`)
+
+Deployed from commit `ed8c5f6` after GitHub Actions passed on it.
+
+| Task | Result |
+| :--- | :--- |
+| `recalibrate_champion` | SUCCESS, 180 s |
+| `spark_udf_batch_score` | SUCCESS, 88 s; scored 48 rows |
+| `compute_monitoring` | SUCCESS, 70 s |
+| `dashboard_extracts` | SUCCESS, 82 s; four Delta tables and four CSV files, including the new `gold_window_value_weekly` (864 rows) |
+
+Checked on the downloaded files:
+
+- `window_candidates.csv`, `window_strategy_summary.csv` and `window_value_weekly.csv` have the same
+  columns and row counts as the local files (30,090 / 64 / 864 rows).
+- `avoided_kg_per_mwh` equals `day_mean_realized - realized_mean` in every row.
+- The strategies that do not depend on the model (hindsight, "repeat yesterday") have identical
+  totals on both platforms. Every `week_start` is a Monday.
+- `forecast_history.csv` is identical to that of the previous workspace run.
+
+Held-out period, 3-hour window, CO2 avoided per MWh moved, workspace against local:
+
+| Zone | Strategy | Workspace | Local | Days dirtier than the day's average, workspace / local |
+| :--- | :--- | :--- | :--- | :--- |
+| DE-LU | median | 67.4 kg | 66.2 kg | 6.8% / 6.8% |
+| DE-LU | cautious | 61.4 kg | 63.5 kg | 13.6% / 12.6% |
+| FR | median | 5.1 kg | 5.2 kg | 9.7% / 9.7% |
+| FR | cautious | 5.1 kg | 5.1 kg | 10.7% / 10.7% |
+
+The differences are G17 again (the workspace model is a different fit). The conclusions hold on both
+platforms, including W8: the cautious strategy avoids less than the median and backfires more often.
+
 ### Still unverified after these runs
 
 - The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).
