@@ -44,6 +44,8 @@ BUNDLE = "databricks.yml"
 MONITORING = "src/carbon_mlops/monitoring/compute_drift.py"
 WINDOWS = "src/carbon_mlops/analysis/windows.py"
 EXTRACTS = "src/carbon_mlops/inference/dashboard_extracts.py"
+AGENT_TOOLS = "src/carbon_mlops/agent/tools.py"
+AGENT = "src/carbon_mlops/agent/qa_agent.py"
 
 COPIED_PATHS: tuple[str, ...] = (
     "src",
@@ -673,6 +675,63 @@ MUTATIONS: tuple[Mutation, ...] = (
         EXTRACTS,
         '(day - pd.to_timedelta(day.dt.day_of_week, unit="D")).dt.strftime("%Y-%m-%d")',
         'day.dt.strftime("%Y-%m-%d")',
+    ),
+    Mutation(
+        "G4",
+        "the cautious window is ranked by the median, not the upper bound",
+        AGENT_TOOLS,
+        "day[RISK_COLUMNS[choose_by]].to_numpy(dtype=float)",
+        'day["p50"].to_numpy(dtype=float)',
+    ),
+    Mutation(
+        "G4",
+        "a tool answers from the oldest forecast instead of the latest",
+        AGENT_TOOLS,
+        'rows[rows["origin_timestamp"] == rows["origin_timestamp"].max()]',
+        'rows[rows["origin_timestamp"] == rows["origin_timestamp"].min()]',
+    ),
+    Mutation(
+        "G4",
+        "the health verdict ignores skill",
+        AGENT_TOOLS,
+        "healthy = bool(in_band and skill > 0)",
+        "healthy = bool(in_band)",
+    ),
+    Mutation(
+        "G4",
+        "weeks outside the band counts the weeks inside it",
+        AGENT_TOOLS,
+        '"weeks_outside_band": int((history["status"] != "ok").sum()),',
+        '"weeks_outside_band": int((history["status"] == "ok").sum()),',
+    ),
+    Mutation(
+        "G4",
+        "the grounding check accepts any number",
+        AGENT,
+        "if not any(round(fact, decimals) == value for fact in allowed):",
+        "if False:",
+    ),
+    Mutation(
+        "G4",
+        "an ungrounded answer is returned anyway",
+        AGENT,
+        "    if violations:\n        logger.error",
+        "    if False:\n        logger.error",
+    ),
+    Mutation(
+        "G4",
+        "a route with an impossible window passes validation",
+        AGENT,
+        "if not 1 <= hours <= len(cfg.horizons) or choose_by not in CHOICES:",
+        "if choose_by not in CHOICES:",
+    ),
+    Mutation(
+        "G4",
+        "a router reply naming an unknown tool is accepted",
+        AGENT,
+        '    if route.tool == "compare_zones_24h":\n        return Route("compare_zones_24h", {})',
+        '    if route.tool not in ("find_greenest_window", "check_model_health"):\n'
+        '        return Route("compare_zones_24h", {})',
     ),
 )
 

@@ -26,3 +26,6 @@ backups/
 
 # Local presentation and dashboard design pack (decks, layouts, per-visual tables, profile photo)
 dashboards/design/
+
+# Local MLflow tracking store (created when the QA agent is run with tracing on)
+mlflow.db*

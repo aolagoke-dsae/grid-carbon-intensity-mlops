@@ -391,6 +391,32 @@ and W2. The 3-hour savings and the share of days cleaner than the day mean were 
 `forecast_history.csv` alone by separate code sharing nothing with the package, and agree to six
 decimals for both zones (103 days each). `databricks bundle validate -t dev` passes with the new task.
 
+## QA agent (US-4.1, gate G4), added 2026-11-18
+
+Design rule: a language model is never allowed near a number. A question is routed to one tool; the
+tool computes; a fixed template writes the sentence; a check re-reads the sentence and refuses it if
+it contains a number that is not one of the tool's facts.
+
+| ID | Item | Where | Status |
+| :--- | :--- | :--- | :--- |
+| Q1 | Three deterministic tools, each traced with `mlflow.trace`: cleanest window, grid comparison, model health. They read the Gold tables on Databricks and their committed snapshots locally, and share the window ranking with the dashboard extracts | `agent/tools.py` | verified locally (pending CI) |
+| Q2 | Keyword router, answer templates, and refusals that contain no figures (out of scope, zone not named, request the tools cannot serve) | `agent/qa_agent.py` | verified locally (pending CI) |
+| Q3 | Grounding check: every number in a finished answer must equal a tool fact at the precision written; otherwise the answer is withheld | `agent/qa_agent.py` | verified locally (pending CI) |
+| Q4 | Model router: a chat model may return only a tool name and arguments, validated against a fixed schema; its prose is discarded; any invalid reply or backend failure falls back to the keyword router | `agent/qa_agent.py` | implemented and tested with a stand-in client; **never run against a live model** (Databricks model serving or Ollama) |
+| Q5 | MLflow traces of a real question | | checked locally 2026-11-18: one question from the command line produced one trace with an agent span (`qa_agent.answer`) containing a tool span (`check_model_health`). Tracing is switched off in the tests. **Not verified on Databricks** |
+| Q6 | `mlflow.openai.autolog()` for the model router, named in the sprint plan | | not implemented |
+
+Verification (2026-11-18): 38 tests, including hand-computed tool results, an independent
+recomputation on the committed snapshots, 18 evaluation questions (`agent/eval_questions.json`), and
+tampering tests for the grounding check; lint clean; 117 tests in about 12.7 s. Breakage audit: 90 of
+90 caught, including 8 new cases for G4. The README quotes one real answer, and a test fails if the
+agent stops giving it.
+
+Limits: the agent answers three kinds of question and refuses the rest. Locally it reads the forecast
+snapshot written by the local pipeline (origin 12 September 2025), so its "latest forecast" is a past
+one. A model router that picks the wrong valid tool gives a grounded answer to the wrong question;
+the grounding check cannot catch that.
+
 ## Dependencies
 
 - B before D: fixing lags and partial hours changes the training data.

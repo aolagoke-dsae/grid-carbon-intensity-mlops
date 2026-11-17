@@ -15,8 +15,8 @@ can we be?*
 >   See [Data and licence](#data-and-licence).
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
-> - **Two planned parts are not built yet:** the two dashboards (their data and build notes exist) and
->   the QA agent.
+> - **Not finished:** the two dashboards are not built (their data and build notes exist). The QA agent
+>   is built and tested, but has not yet been run with a live language model.
 
 ## Results at a glance
 
@@ -133,7 +133,23 @@ flowchart LR
 | G1 Provenance | The snapshot's SHA-256 is pinned and checked on every load; each row traces to an upstream retrieval | `tests/test_ingestion_provenance.py` |
 | G2 No temporal leakage | Every lag, rolling statistic, mix feature and target is re-derived by timestamp on each build and compared | `features/build_features.py`, `tests/test_no_leakage.py` |
 | G3 Calibration and promotion | The gate re-scores challenger and champion itself. It requires coverage of 87% to 96% in every zone, a median that beats persistence in every zone and bucket, and a pinball loss no worse than the champion's | `models/evaluate_gate.py`, `tests/test_pyfunc_contract.py` |
-| G4 Grounded QA agent | Not built yet | |
+| G4 Grounded QA agent | Every number in an answer is a fact returned by a tested tool. A check re-reads each finished answer and refuses it if it contains any other number. A language model, when used, may only choose the tool and its arguments | `agent/tools.py`, `agent/qa_agent.py`, `tests/test_agent_tools.py` |
+
+### Asking the agent
+
+The agent answers three kinds of question from the forecast and monitoring tables: when the cleanest
+hours are in a zone, how the two grids compare, and whether the model is still healthy.
+
+```
+> python -m carbon_mlops.agent.qa_agent "What is the cleanest 4-hour window in Germany?"
+In Germany-Luxembourg (DE-LU), the cleanest 4-hour window by the median forecast runs from 12 Sep 2025 10:00 to 12 Sep 2025 14:00 UTC, in the forecast issued 12 Sep 2025 09:00 UTC. Expected carbon intensity in that window is 120 g CO2 per kWh (90% interval: 96 to 149), against 207 on average over the 24 forecast hours. That is 42% lower, or 87 kg CO2 avoided per MWh moved into the window. This is what the forecast expects, not a measured saving.
+```
+
+That answer is computed from the committed forecast snapshot, which is a past forecast, not a live
+one. A question outside the three kinds gets a refusal that contains no figures. The agent never
+does arithmetic and a language model never writes the answer: by default a keyword router picks the
+tool, and with `--router llm` a model picks it instead, falling back to keywords if its reply is not
+a valid tool call.
 
 The tests are themselves tested. `scripts/mutation_audit.py` breaks one safeguard at a time in a
 scratch copy and fails if the test suite does not notice.
@@ -153,6 +169,7 @@ pip install -e ".[dev]"
 | Compute drift and coverage monitoring | `.\scripts\dev.ps1 monitor` | `make monitor` |
 | Write the dashboard extracts | `.\scripts\dev.ps1 dashboards` | `make dashboards` |
 | Run the breakage audit (several minutes) | `.\scripts\dev.ps1 audit` | `make audit` |
+| Ask the QA agent a question | `python -m carbon_mlops.agent.qa_agent "..."` | the same |
 
 The local pipeline ingests the snapshot, builds features, trains, evaluates on Gate-Val and writes
 `dashboards/data/latest_24h_forecasts.csv` and `docs/images/cqr_24h_fan_chart.png`. It takes about
@@ -238,7 +255,7 @@ changes no model.
 | Planned | Status |
 | :--- | :--- |
 | One Tableau and one Power BI dashboard | Not built. Their data files and per-visual build notes are in [dashboards/README.md](dashboards/README.md) |
-| Grounded QA agent (`agent/`) and gate G4 | Not started |
+| The QA agent with a live language model | The agent, its keyword router and gate G4 are built and tested. The model router is tested with a stand-in only: no hosted model has been called yet, and its MLflow traces have not been checked on Databricks |
 | Day-ahead prices, load and flows as features | Deferred; the snapshot does not export them |
 
 Open limitations and every issue found in review are tracked in

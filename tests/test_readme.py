@@ -122,3 +122,16 @@ def test_readme_window_savings_match_the_strategy_summary() -> None:
     ):
         assert name in build_notes
         assert (REPO_ROOT / "dashboards/data" / name).exists()
+
+
+def test_readme_agent_example_is_what_the_agent_says() -> None:
+    import mlflow
+
+    from carbon_mlops.agent.qa_agent import answer
+
+    mlflow.tracing.disable()
+    question = "What is the cleanest 4-hour window in Germany?"
+    reply = answer(question)
+    assert reply.grounded
+    assert question in README
+    assert reply.text in README, "the README quotes an answer the agent no longer gives"
