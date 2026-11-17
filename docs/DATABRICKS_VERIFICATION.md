@@ -204,6 +204,48 @@ Final registry state:
 | 3 | Second training run, promoted on a tie | end of Gate-Val | `challenger` |
 | 4 | Recalibration of version 3 | 2025-12-31 23:00 UTC | `champion` |
 
+### 2026-11-17, third inference run with monitoring and dashboard extracts (run `963815134813799`)
+
+Deployed from commit `b1c5065` (GitHub Actions green on that commit). First run of the monitoring
+and extract tasks on the workspace.
+
+| Task | Result |
+| :--- | :--- |
+| `recalibrate_champion` | SUCCESS, 96 s |
+| `spark_udf_batch_score` | SUCCESS, 88 s; scored 48 rows into `gold_forecasts` and rewrote the extract |
+| `compute_monitoring` | SUCCESS, 69 s; `gold_monitoring.csv` written to the volume (1,352 rows) |
+| `dashboard_extracts` | SUCCESS, 76 s; three Delta tables and three CSV files written |
+
+Checked afterwards: `champion` is version 5 and `challenger` is version 3. The volume
+`workspace.carbon_mlops.exports` holds `forecast_history.csv` (8,496 rows), `window_candidates.csv`
+(30,090 rows), `window_strategy_summary.csv` (64 rows), `gold_monitoring.csv` and
+`latest_24h_forecasts.csv`. The four files were downloaded and compared with the committed local
+ones, row by row on their keys:
+
+| Compared | Result |
+| :--- | :--- |
+| Row counts and columns | identical in all four files |
+| Realized values, hindsight and "yesterday" strategies | identical |
+| Feature drift (PSI), both references | identical, every row |
+| Forecast quantiles | differ: mean absolute difference in `p50` of 6.8 gCO2eq/kWh in DE-LU (about 2%) and 0.5 in FR; largest single difference 36 |
+| Whether an hour was covered | agrees for 97.9% of rows |
+| Coverage, held-out period | DE-LU 0.913 on the workspace against 0.918 locally; FR 0.888 against 0.889 |
+| Weekly coverage status | agrees for 95.7% of rows; weeks below the band: DE-LU 10 on the workspace against 8 locally, FR 11 against 11 |
+| Saving of the median strategy, 3 h, held-out | DE-LU 19.1% on the workspace against 18.9% locally; FR 14.0% against 14.2% |
+
+Two findings:
+
+- **The workspace model is not the local model (G17).** Everything that does not depend on the fitted
+  model is identical, so the data and the code agree. The forecasts differ because the base models
+  were fitted on different platforms; this is the same cause as G16, now measured on the forecasts
+  themselves and larger than the Gate-Val coverage figures suggested. Conclusions are the same on
+  both, but the numbers are not interchangeable. The figures in the README, the locked-test results
+  and the committed dashboard files all come from the local model.
+- **Timestamps are written differently (W5).** The workspace CSV files carry no UTC offset
+  (`2025-07-03 01:00:00`) where the local ones do (`2025-07-03 01:00:00+00:00`), and a midnight
+  origin is written as a date only. The instants are the same. A dashboard built on the local files
+  would need its date parsing checked before being pointed at the workspace files.
+
 ### Still unverified after these runs
 
 - The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).

@@ -160,7 +160,7 @@ databricks bundle run -t dev carbon_batch_inference
 ```
 
 Both jobs were run end to end on a Databricks Free Edition workspace on 15 November 2026, before the
-monitoring and dashboard-extract tasks were added; those two tasks have not run on Databricks yet. The steps,
+monitoring and dashboard-extract tasks were added; those two ran successfully on 17 November 2026. The model fitted on Databricks is not numerically identical to the local one (its median forecasts differ by about 2% in DE-LU), and every figure in this README comes from the local model. The steps,
 observed results, and what remains unverified are in
 [docs/DATABRICKS_VERIFICATION.md](docs/DATABRICKS_VERIFICATION.md). The inference schedule is paused
 on purpose: the snapshot is static, so a recurring run would rescore the same hours.

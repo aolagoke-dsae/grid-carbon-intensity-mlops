@@ -325,7 +325,7 @@ New work, not part of the original review. Status follows the same three-state r
 | :--- | :--- | :--- | :--- |
 | M1 | Feature drift: PSI per zone and feature, trailing 30 days against Train and against the same 30 days a year earlier | `monitoring/compute_drift.py` | verified locally (pending CI) |
 | M2 | Rolling 7-day coverage per zone and horizon bucket, miss direction, width, skill against persistence | `monitoring/compute_drift.py` | verified locally (pending CI) |
-| M3 | Monitoring task in the Databricks inference job (`carbon-monitor`) | `jobs.py`, `databricks.yml` | implemented; bundle consistency tested; **not deployed, never run on the workspace** |
+| M3 | Monitoring task in the Databricks inference job (`carbon-monitor`) | `jobs.py`, `databricks.yml` | verified on the workspace 2026-11-17 (run `963815134813799`); see `docs/DATABRICKS_VERIFICATION.md` |
 | M4 | PSI against the whole Train period is high almost always (321 of 468 values at alert), because a 30-day window against 14 months mostly measures the season | design | addressed by adding the same-season reference; the original measure is kept because the sprint plan specifies it |
 | M5 | Same-season PSI is still at alert in 249 of 468 values. The 0.10 / 0.25 thresholds assume independent samples; a month of hourly data is strongly autocorrelated | design | open limitation, documented in the README; thresholds deliberately not retuned |
 | M6 | Skill against persistence falls from about 0.6 (DE-LU) and 0.4 (FR) in July to about 0.05 and 0.2 in December, with three negative weeks. Season and model age cannot be separated with one year of data. Base models are never refitted, only recalibrated | finding | open: no retraining schedule exists |
@@ -355,8 +355,10 @@ visuals. The dashboards themselves are built by the author; this section covers 
 | :--- | :--- | :--- | :--- |
 | W1 | Window ranking (window means, cleanest start, hindsight rank), shared by the extracts and the future QA agent | `analysis/windows.py` | verified locally (pending CI) |
 | W2 | Forecast history, candidate windows per strategy, and strategy summary | `inference/dashboard_extracts.py` | verified locally (pending CI) |
-| W3 | Extract task in the Databricks inference job (`carbon-extracts`) | `jobs.py`, `databricks.yml` | implemented; bundle consistency tested; **not deployed, never run on the workspace** |
+| W3 | Extract task in the Databricks inference job (`carbon-extracts`) | `jobs.py`, `databricks.yml` | verified on the workspace 2026-11-17 (run `963815134813799`); see `docs/DATABRICKS_VERIFICATION.md` |
 | W4 | Per-visual build notes, colours, source line and refresh steps | `dashboards/README.md` | written; the dashboards do not exist yet |
+| W5 | CSV files written on the workspace carry no UTC offset and write midnight as a date only; the local files carry `+00:00`. Same instants, different text | `inference/dashboard_extracts.py`, `monitoring/compute_drift.py` | open; found 2026-11-17. The dashboards are built on the local files |
+| G17 | Forecasts from the workspace champion differ from the local model's: mean absolute difference in `p50` of 6.8 gCO2eq/kWh in DE-LU (about 2%), 0.5 in FR. Model-independent outputs are identical. Same cause as G16, larger than its coverage figures suggested | `docs/DATABRICKS_VERIFICATION.md` | open; found 2026-11-17. Conclusions agree; published figures come from the local model |
 
 The extracts read the held-out period, for reporting only, on the basis approved for monitoring on
 2026-11-16. Daily forecasts are those issued at 00:00 UTC.
