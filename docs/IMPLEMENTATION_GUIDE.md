@@ -10,7 +10,7 @@ This plan organizes delivery into **four 1-week Sprints**. Every Sprint delivers
 | :--- | :--- | :--- | :--- |
 | **Epic 1: Walking Skeleton** | **Sprint 1** | Nov 15 – Nov 21 | Local & Databricks end-to-end vertical slice + EDA plots (`Gates G1, G2`) |
 | **Epic 2: MLOps Governance & CI/CD** | **Sprint 2** | Nov 22 – Nov 28 | Unity Catalog Feature Store, `@champion` gate on Gate-Val, Spark UDF scoring & DAB (`Gate G3`) |
-| **Epic 3: Hypotheses, Drift & BI** | **Sprint 3** | Nov 29 – Dec 5 | Autocorrelation-safe `H1–H3` evaluation on Locked Test, PSI monitoring & Tableau Public `.twbx` |
+| **Epic 3: Hypotheses, Drift & BI** | **Sprint 3** | Nov 29 – Dec 5 | Autocorrelation-safe `H1–H3` evaluation on Locked Test, PSI monitoring, one Tableau and one Power BI dashboard |
 | **Epic 4: Agentic QA & Freeze** | **Sprint 4** | Dec 6 – Dec 10 | Grounded QA Copilot (`@mlflow.trace`), Dec 8 code freeze & Dec 11 demo rehearsal (`Gate G4`) |
 
 ---
@@ -52,20 +52,20 @@ This plan organizes delivery into **four 1-week Sprints**. Every Sprint delivers
 
 ---
 
-## Sprint 3 (Nov 29 – Dec 5): Hypothesis Validation, Drift Monitoring & Tableau BI
-**Sprint Goal:** Formally test pre-registered hypotheses (`H1–H3`) on the Locked Test split, automate feature PSI & coverage drift monitoring, and publish the packaged Tableau Public dashboard.
+## Sprint 3 (Nov 29 – Dec 5): Hypothesis Validation, Drift Monitoring & BI Dashboards
+**Sprint Goal:** Formally test pre-registered hypotheses (`H1–H3`) on the Locked Test split, automate feature PSI & coverage drift monitoring, and build two complementary dashboards, one in Tableau and one in Power BI.
 
 ### Sprint 3 Backlog
 * **US-3.1 — Statistical Hypothesis Evaluation (`H1`, `H2`, `H3`):**
   * *Story:* As a quantitative researcher, I want `notebooks/02_cqr_calibration_analysis.py` to run autocorrelation-safe Mann-Whitney U (with block bootstrap) and daily/non-overlapping paired Wilcoxon tests for `H1–H3` on the **Locked Holdout Test split** and output summary tables/plots.
 * **US-3.2 — Automated Drift & Coverage Monitoring:**
   * *Story:* As an MLOps engineer, I want `monitoring/compute_drift.py` integrated into `carbon_batch_inference` to compute feature PSI and rolling 7-day empirical coverage into `gold_monitoring` (`dashboards/data/gold_monitoring.csv`).
-* **US-3.3 — Packaged Tableau Public Dashboard:**
-  * *Story:* As an energy operator, I want `dashboards/carbon_forecast.twbx` (with embedded Gold CSV extracts) published to Tableau Public with 4 views: (1) Next-24h KPI & Best Green Window cards, (2) `DE-LU` vs. `FR` `[p05, p95]` fan chart, (3) Cross-border `DE-LU - FR` arbitrage bar chart, and (4) Rolling coverage & PSI control chart.
+* **US-3.3 — Two Complementary Dashboards (Tableau and Power BI):**
+  * *Story:* As an energy operator, I want a Tableau dashboard (`dashboards/carbon_forecast.twbx`, published to Tableau Public) that answers "when should I run my load, and how sure is the forecast?": headline numbers, a fan chart with the recommended window, every possible start hour, a calendar of realized savings, and the two grids side by side. As a model owner, I want a Power BI dashboard (`dashboards/model_health.pbix`) that answers "is the model still trustworthy?": status cards, a coverage control chart, coverage by lead time and by renewable regime, a drift matrix, and skill over time. The two share no visuals. Revised 2026-11-17 from four Tableau views, to show both tools without duplication; per-visual build notes are in `dashboards/README.md`.
 
 ### Sprint 3 Definition of Done (Review: Dec 5)
 * `H1–H3` statistical results (p-values, effect sizes, falsification verdicts) documented on Locked Test.
-* Live Tableau Public dashboard published, extract refresh workflow documented in `dashboards/README.md`, and screenshot saved to `docs/images/tableau_dashboard.png`.
+* Tableau dashboard published to Tableau Public and Power BI dashboard saved as `.pbix`, both carrying the data source line; extract refresh workflow documented in `dashboards/README.md`; screenshots saved to `docs/images/tableau_dashboard.png` and `docs/images/powerbi_dashboard.png`.
 
 ---
 

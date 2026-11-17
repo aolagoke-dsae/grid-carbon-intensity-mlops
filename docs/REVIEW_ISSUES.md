@@ -346,6 +346,31 @@ What the first real output shows (`dashboards/data/gold_monitoring.csv`, 26 week
 - FR drifts more than DE-LU year on year: its intensity, fossil share and 24-hour mean are at alert
   in 88% to 96% of weeks, against 35% to 85% for the same DE-LU features.
 
+## Dashboard extracts (US-3.3), added 2026-11-17
+
+US-3.3 was revised from four Tableau views to one Tableau and one Power BI dashboard with no shared
+visuals. The dashboards themselves are built by the author; this section covers their data.
+
+| ID | Item | Where | Status |
+| :--- | :--- | :--- | :--- |
+| W1 | Window ranking (window means, cleanest start, hindsight rank), shared by the extracts and the future QA agent | `analysis/windows.py` | verified locally (pending CI) |
+| W2 | Forecast history, candidate windows per strategy, and strategy summary | `inference/dashboard_extracts.py` | verified locally (pending CI) |
+| W3 | Extract task in the Databricks inference job (`carbon-extracts`) | `jobs.py`, `databricks.yml` | implemented; bundle consistency tested; **not deployed, never run on the workspace** |
+| W4 | Per-visual build notes, colours, source line and refresh steps | `dashboards/README.md` | written; the dashboards do not exist yet |
+
+The extracts read the held-out period, for reporting only, on the basis approved for monitoring on
+2026-11-16. Daily forecasts are those issued at 00:00 UTC.
+
+First real output, 3-hour window, held-out period, 103 comparable days per zone: a window chosen from
+the median forecast was 18.9% (DE-LU) and 14.2% (FR) cleaner than the day's average, against 12.9%
+and 9.5% for "repeat yesterday's cleanest hours" and 25.4% and 18.7% in hindsight.
+
+Verification (2026-11-17): 7 unit tests with hand-computed answers plus a README consistency test;
+lint clean; 76 tests in about 12.8 s. Breakage audit: 74 of 74 caught, including 7 new cases for W1
+and W2. The 3-hour savings and the share of days cleaner than the day mean were recomputed from
+`forecast_history.csv` alone by separate code sharing nothing with the package, and agree to six
+decimals for both zones (103 days each). `databricks bundle validate -t dev` passes with the new task.
+
 ## Dependencies
 
 - B before D: fixing lags and partial hours changes the training data.

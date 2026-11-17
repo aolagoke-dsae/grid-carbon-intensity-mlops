@@ -7,7 +7,7 @@ because a console entry point's return value is used as the process exit status.
 
 Task order on Databricks:
     carbon_training_pipeline:  ingest -> features -> train -> gate
-    carbon_batch_inference:    recalibrate -> score, monitor
+    carbon_batch_inference:    recalibrate -> score, monitor, dashboard extracts
 """
 
 from __future__ import annotations
@@ -20,6 +20,10 @@ from mlflow.tracking import MlflowClient
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import TRAINING_TABLE, run_feature_pipeline
 from carbon_mlops.inference import batch_score
+from carbon_mlops.inference.dashboard_extracts import (
+    build_dashboard_extracts,
+    write_dashboard_extracts,
+)
 from carbon_mlops.ingestion.ingest_entsoe import ingest_bronze_snapshot
 from carbon_mlops.io.store import read_table
 from carbon_mlops.models.evaluate_gate import GateDecision, evaluate_and_promote_champion
@@ -148,6 +152,20 @@ def run_monitoring_job(
     return write_monitoring(compute_monitoring(champion, features, cfg), cfg)
 
 
+def run_dashboard_extracts_job(
+    cfg: CarbonMLOpsConfig | None = None,
+    features_df: pd.DataFrame | None = None,
+) -> list[str]:
+    """Write the forecast-history and window extracts for the BI dashboards from @champion.
+
+    Returns the locations of the CSV files.
+    """
+    cfg = cfg or CarbonMLOpsConfig()
+    features = features_df if features_df is not None else read_training_table(cfg)
+    champion = load_registered_forecaster(resolve_model_name(cfg), "champion")
+    return write_dashboard_extracts(build_dashboard_extracts(champion, features, cfg), cfg)
+
+
 def ingest_main() -> None:
     _configure_logging()
     ingest_bronze_snapshot()
@@ -177,6 +195,11 @@ def recalibrate_main() -> None:
 def monitor_main() -> None:
     _configure_logging()
     run_monitoring_job()
+
+
+def extracts_main() -> None:
+    _configure_logging()
+    run_dashboard_extracts_job()
 
 
 def score_main() -> None:

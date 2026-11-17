@@ -3,7 +3,7 @@
 - **Author:** Dr. Adewole Olagoke (`@aolagoke-dsae`)
 - **Target Presentation:** December 11, 2026 (Code Freeze: December 8, 2026)
 - **Delivery Methodology:** Scrum-Adapted 4-Sprint Iterative Plan (Nov 15 – Dec 10, 2026)
-- **Platform & Stack:** Databricks (Unity Catalog, Feature Engineering, MLflow Registry & Tracing, Asset Bundles), LightGBM + Split Conformalized Quantile Regression (CQR), Tableau Public (packaged extract), GitHub Actions
+- **Platform & Stack:** Databricks (Unity Catalog, Feature Engineering, MLflow Registry & Tracing, Asset Bundles), LightGBM + Split Conformalized Quantile Regression (CQR), Tableau Public and Power BI (one dashboard each), GitHub Actions
 
 ---
 
@@ -14,7 +14,7 @@ Standard scheduling tools rely on **deterministic point forecasts** of grid carb
 
 This project operationalizes an end-to-end **Databricks MLOps & Uncertainty-Aware Decision System** for `DE-LU` and France (`FR`) that:
 1. Delivers 24-hour probabilistic forecasts (`p05`, `p50`, `p95`) whose 90% intervals are conformally calibrated and recalibrated weekly on recent forecast errors. Coverage is verified empirically: hourly grid data is autocorrelated and seasonal, so the textbook finite-sample guarantee of conformal prediction does not strictly apply.
-2. Publishes batch-exported Gold forecasts and drift diagnostics to **Tableau Public** (via packaged `.twbx` extracts) for operational planning.
+2. Publishes batch-exported Gold forecasts to a **Tableau Public** dashboard for operational planning, and drift and coverage diagnostics to a **Power BI** dashboard for model health.
 3. Provides a **grounded, tool-calling QA Copilot** (with MLflow Tracing) that answers risk-constrained dispatch and model-health questions using deterministic queries over Gold tables—never LLM-invented numbers.
 
 ---
@@ -75,5 +75,5 @@ All hypotheses concern empirical physical properties of the `DE-LU` and `FR` ele
 ## 6. Sprint-Aligned Product Epics (Nov 15 – Dec 10, 2026)
 * **Epic 1 (`Sprint 1`):** Walking Skeleton — Bronze snapshot ingestion, leakage-free horizon features, Split-CQR baseline, and EDA diagnostics.
 * **Epic 2 (`Sprint 2`):** Lakehouse Governance & CI/CD — Unity Catalog Feature Store, `@champion` promotion gate on Gate-Val, Spark UDF batch scoring, DAB, and GitHub Actions.
-* **Epic 3 (`Sprint 3`):** Empirical Validation & BI — Formal `H1–H3` hypothesis testing on Locked Test, PSI/coverage drift monitoring, and packaged Tableau Public dashboard.
+* **Epic 3 (`Sprint 3`):** Empirical Validation & BI — Formal `H1–H3` hypothesis testing on Locked Test, PSI/coverage drift monitoring, and two complementary dashboards (Tableau for planning, Power BI for model health).
 * **Epic 4 (`Sprint 4`):** Grounded Agentic QA & Defense — Tool-calling QA Copilot with MLflow Tracing, Dec 8 code freeze, and Dec 11 presentation rehearsal.

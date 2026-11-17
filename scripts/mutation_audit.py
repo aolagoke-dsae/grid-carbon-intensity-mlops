@@ -42,6 +42,8 @@ JOBS = "src/carbon_mlops/jobs.py"
 SCORING = "src/carbon_mlops/inference/batch_score.py"
 BUNDLE = "databricks.yml"
 MONITORING = "src/carbon_mlops/monitoring/compute_drift.py"
+WINDOWS = "src/carbon_mlops/analysis/windows.py"
+EXTRACTS = "src/carbon_mlops/inference/dashboard_extracts.py"
 
 COPIED_PATHS: tuple[str, ...] = (
     "src",
@@ -50,7 +52,7 @@ COPIED_PATHS: tuple[str, ...] = (
     "notebooks",
     "docs",
     "data/bronze_snapshot",
-    "dashboards/data",
+    "dashboards",
 )
 COPIED_FILES: tuple[str, ...] = (
     "pyproject.toml",
@@ -562,6 +564,57 @@ MUTATIONS: tuple[Mutation, ...] = (
         MONITORING,
         "skill = 1.0 - model_loss / baseline_loss if baseline_loss > 0",
         "skill = 1.0 - baseline_loss / model_loss if baseline_loss > 0",
+    ),
+    Mutation(
+        "W1",
+        "window mean divided by the wrong length",
+        WINDOWS,
+        "return (totals[window_hours:] - totals[:-window_hours]) / window_hours",
+        "return (totals[window_hours:] - totals[:-window_hours]) / (window_hours + 1)",
+    ),
+    Mutation(
+        "W1",
+        "the dirtiest window is recommended instead of the cleanest",
+        WINDOWS,
+        "return int(np.argmin(scores))",
+        "return int(np.argmax(scores))",
+    ),
+    Mutation(
+        "W1",
+        "cautious ranking uses the median instead of the upper bound",
+        WINDOWS,
+        '{"median": "p50", "cautious": "p95"}',
+        '{"median": "p50", "cautious": "p50"}',
+    ),
+    Mutation(
+        "W2",
+        "forecast history keeps every origin hour, not the daily one",
+        EXTRACTS,
+        'daily = preds_df[preds_df["origin_timestamp"].dt.hour == origin_hour_utc]',
+        "daily = preds_df",
+    ),
+    Mutation(
+        "W2",
+        "saving against the day mean has the wrong sign",
+        EXTRACTS,
+        '"saving_vs_day_mean": 1.0 - realized_mean / day_mean,',
+        '"saving_vs_day_mean": realized_mean / day_mean - 1.0,',
+    ),
+    Mutation(
+        "W2",
+        "the yesterday strategy reuses a day that is not the previous one",
+        EXTRACTS,
+        "consecutive = previous_date is not None and this_date - previous_date == pd.Timedelta(\n"
+        "                days=1\n"
+        "            )",
+        "consecutive = previous_date is not None",
+    ),
+    Mutation(
+        "W2",
+        "strategies are compared on different sets of days",
+        EXTRACTS,
+        "comparable = candidates_df[has_yesterday]",
+        "comparable = candidates_df",
     ),
 )
 

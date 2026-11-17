@@ -15,7 +15,8 @@ can we be?*
 >   See [Data and licence](#data-and-licence).
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
-> - **Two planned parts are not built yet:** the Tableau dashboard and the QA agent.
+> - **Two planned parts are not built yet:** the two dashboards (their data and build notes exist) and
+>   the QA agent.
 
 ## Results at a glance
 
@@ -37,6 +38,21 @@ The average hides three weaknesses:
 - **Calibration depends on the regime.** In DE-LU's highest renewable-share quartile coverage is
   83.3%. Those are the greenest hours, where a load-shifting user would act.
 - **FR at one hour ahead does not beat persistence.**
+
+### Does acting on the forecast help?
+
+Each day, pick one window for a flexible load from the forecast issued at 00:00 UTC, and compare what
+that window actually emitted with the day's average. Held-out period, 103 days per zone:
+
+| Zone | Window | Chosen from the median forecast | "Repeat yesterday's cleanest hours" | Best possible in hindsight |
+| :--- | :--- | :--- | :--- | :--- |
+| DE-LU | 3 h | 18.9% cleaner | 12.9% cleaner | 25.4% cleaner |
+| FR | 3 h | 14.2% cleaner | 9.5% cleaner | 18.7% cleaner |
+
+The forecast beats the rule of thumb and captures about three quarters of what hindsight would
+allow. In summer (the validation period) the rule of thumb does almost as well in DE-LU, because
+the solar-driven daily pattern repeats. These are relative savings in intensity, not tonnes. All
+window lengths and both periods are in `dashboards/data/window_strategy_summary.csv`.
 
 ### Hypotheses
 
@@ -113,6 +129,7 @@ pip install -e ".[dev]"
 | Lint and test | `.\scripts\dev.ps1 test` | `make test` |
 | Run the pipeline locally | `.\scripts\dev.ps1 run-local` | `make run-local` |
 | Compute drift and coverage monitoring | `.\scripts\dev.ps1 monitor` | `make monitor` |
+| Write the dashboard extracts | `.\scripts\dev.ps1 dashboards` | `make dashboards` |
 | Run the breakage audit (several minutes) | `.\scripts\dev.ps1 audit` | `make audit` |
 
 The local pipeline ingests the snapshot, builds features, trains, evaluates on Gate-Val and writes
@@ -134,7 +151,7 @@ Two Serverless jobs are defined in `databricks.yml` and run from a wheel built f
 | Job | Tasks |
 | :--- | :--- |
 | `carbon_training_pipeline` | ingest, features, train, gate |
-| `carbon_batch_inference` | recalibrate the champion, then score with a Spark UDF and compute monitoring |
+| `carbon_batch_inference` | recalibrate the champion, then score with a Spark UDF, compute monitoring and write the dashboard extracts |
 
 ```bash
 databricks bundle deploy -t dev
@@ -143,7 +160,7 @@ databricks bundle run -t dev carbon_batch_inference
 ```
 
 Both jobs were run end to end on a Databricks Free Edition workspace on 15 November 2026, before the
-monitoring task was added; that task has not run on Databricks yet. The steps,
+monitoring and dashboard-extract tasks were added; those two tasks have not run on Databricks yet. The steps,
 observed results, and what remains unverified are in
 [docs/DATABRICKS_VERIFICATION.md](docs/DATABRICKS_VERIFICATION.md). The inference schedule is paused
 on purpose: the snapshot is static, so a recurring run would rescore the same hours.
@@ -198,7 +215,7 @@ changes no model.
 
 | Planned | Status |
 | :--- | :--- |
-| Tableau dashboard | Not started; its input files exist in `dashboards/data/` |
+| One Tableau and one Power BI dashboard | Not built. Their data files and per-visual build notes are in [dashboards/README.md](dashboards/README.md) |
 | Grounded QA agent (`agent/`) and gate G4 | Not started |
 | Day-ahead prices, load and flows as features | Deferred; the snapshot does not export them |
 

@@ -1,4 +1,4 @@
-.PHONY: test audit run-local monitor deploy
+.PHONY: test audit run-local monitor dashboards deploy
 
 test:
 	ruff check src tests notebooks scripts
@@ -12,6 +12,9 @@ run-local:
 
 monitor:
 	python -m carbon_mlops.monitoring.compute_drift
+
+dashboards:
+	python -m carbon_mlops.inference.dashboard_extracts
 
 deploy:
 	databricks bundle deploy -t dev
