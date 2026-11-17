@@ -246,6 +246,27 @@ Two findings:
   origin is written as a date only. The instants are the same. A dashboard built on the local files
   would need its date parsing checked before being pointed at the workspace files.
 
+### 2026-11-17, fourth inference run, confirming the timestamp fix (run `448998131378416`)
+
+Deployed from commit `0b20cdb` after GitHub Actions passed on it.
+
+| Task | Result |
+| :--- | :--- |
+| `recalibrate_champion` | SUCCESS, 95 s; "Recalibrated ... v5 -> v6 through 2025-12-31 23:00:00" |
+| `spark_udf_batch_score` | SUCCESS, 82 s; scored 48 rows |
+| `compute_monitoring` | SUCCESS, 64 s; 1,352 rows |
+| `dashboard_extracts` | SUCCESS, 69 s; 8,496, 30,090 and 64 rows |
+
+The five CSV files were downloaded again. Every timestamp value in every timestamp column now has
+the form `2025-07-03 00:00:00+00:00`. In `forecast_history.csv`, `window_candidates.csv` and
+`gold_monitoring.csv` the timestamp columns are equal, as text and row for row, to those of the
+committed local files. `latest_24h_forecasts.csv` has the same format; its values differ from the
+local file only because the local pipeline scores a different origin. W5 is closed.
+
+All numeric values in the forecast history, the monitoring table and the strategy summary are
+identical to those of the previous workspace run, as expected: version 6 has the same base models
+as version 5 and was recalibrated on the same window. G17 is unchanged.
+
 ### Still unverified after these runs
 
 - The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).
