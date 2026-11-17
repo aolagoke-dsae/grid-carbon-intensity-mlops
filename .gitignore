@@ -23,3 +23,6 @@ _repo_review_bundle.txt
 
 # Local backup of the original history (see docs/HISTORY_REWRITE.md); never pushed
 backups/
+
+# Local presentation and dashboard design pack (decks, layouts, per-visual tables, profile photo)
+dashboards/design/
