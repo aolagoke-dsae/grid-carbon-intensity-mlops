@@ -32,7 +32,7 @@ from carbon_mlops.analysis.windows import RISK_COLUMNS, best_start, hindsight_ra
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import build_horizon_features
 from carbon_mlops.ingestion.ingest_entsoe import ingest_bronze_snapshot
-from carbon_mlops.io.store import is_databricks_runtime, write_table
+from carbon_mlops.io.store import is_databricks_runtime, write_csv_extract, write_table
 from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
 from carbon_mlops.models.train import (
     DEFAULT_LGBM_PARAMS,
@@ -274,7 +274,7 @@ def write_dashboard_extracts(tables: dict[str, pd.DataFrame], cfg: CarbonMLOpsCo
             catalog=cfg.catalog,
         )
         csv_path = f"{csv_dir}/{csv_name}"
-        table.to_csv(csv_path, index=False, float_format="%.6g")
+        write_csv_extract(table, csv_path, float_format="%.6g")
         written.append(csv_path)
         logger.info("Wrote %d rows to %s", len(table), csv_path)
     return written

@@ -82,3 +82,31 @@ def read_table(
         raise FileNotFoundError(f"Local Parquet table not found: {target_path}")
     logger.info("Reading local Parquet %s", target_path)
     return pd.read_parquet(target_path)
+
+
+UTC_TEXT_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"
+
+
+def write_csv_extract(
+    df: pd.DataFrame,
+    csv_path: str | Path,
+    float_format: str | None = None,
+) -> str:
+    """Write a CSV extract with every timestamp as UTC text carrying an explicit ``+00:00``.
+
+    Tables read back from Delta arrive without a time zone (Spark hands them over in the session
+    time zone, which is UTC on Databricks), while local Parquet keeps it. Left alone, the same
+    instant is written as ``2025-07-03`` on one platform and ``2025-07-03 00:00:00+00:00`` on
+    the other. Columns without a time zone are therefore taken to be UTC.
+    """
+    out = df.copy()
+    for column in out.columns:
+        if not pd.api.types.is_datetime64_any_dtype(out[column]):
+            continue
+        values = out[column]
+        in_utc = (
+            values.dt.tz_localize("UTC") if values.dt.tz is None else values.dt.tz_convert("UTC")
+        )
+        out[column] = in_utc.dt.strftime(UTC_TEXT_FORMAT)
+    out.to_csv(csv_path, index=False, float_format=float_format)
+    return str(csv_path)

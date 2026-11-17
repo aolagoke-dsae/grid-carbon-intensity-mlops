@@ -616,6 +616,27 @@ MUTATIONS: tuple[Mutation, ...] = (
         "comparable = candidates_df[has_yesterday]",
         "comparable = candidates_df",
     ),
+    Mutation(
+        "W5",
+        "timestamps in a time zone other than UTC are written without converting",
+        STORE,
+        'values.dt.tz_convert("UTC")',
+        "values",
+    ),
+    Mutation(
+        "W5",
+        "CSV timestamps written without the UTC offset",
+        STORE,
+        'UTC_TEXT_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"',
+        'UTC_TEXT_FORMAT = "%Y-%m-%d %H:%M:%S"',
+    ),
+    Mutation(
+        "W5",
+        "the monitoring CSV bypasses the shared writer",
+        MONITORING,
+        'write_csv_extract(table, csv_path, float_format="%.6g")',
+        'table.to_csv(csv_path, index=False, float_format="%.6g")',
+    ),
 )
 
 

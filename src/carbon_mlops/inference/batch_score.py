@@ -15,7 +15,7 @@ from carbon_mlops.features.build_features import (
     build_horizon_features,
 )
 from carbon_mlops.ingestion.ingest_entsoe import ingest_bronze_snapshot
-from carbon_mlops.io.store import is_databricks_runtime, write_table
+from carbon_mlops.io.store import is_databricks_runtime, write_csv_extract, write_table
 from carbon_mlops.models.train import resolve_model_name, train_split_cqr
 from carbon_mlops.viz.diagnostics import plot_probabilistic_forecast
 
@@ -56,7 +56,7 @@ def run_local_pipeline(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
 
     cfg.dashboard_data_dir.mkdir(parents=True, exist_ok=True)
     csv_out = cfg.dashboard_data_dir / "latest_24h_forecasts.csv"
-    gold_df.to_csv(csv_out, index=False)
+    write_csv_extract(gold_df, csv_out)
 
     fan_path = Path(cfg.images_dir) / "cqr_24h_fan_chart.png"
     plot_probabilistic_forecast(gold_df, output_path=fan_path)
@@ -146,7 +146,7 @@ def run_databricks_batch_scoring(cfg: CarbonMLOpsConfig | None = None) -> str:
     spark.sql(f"CREATE VOLUME IF NOT EXISTS {cfg.catalog}.{cfg.schema}.{EXPORT_VOLUME}")
     export_path = f"/Volumes/{cfg.catalog}/{cfg.schema}/{EXPORT_VOLUME}/latest_24h_forecasts.csv"
     pdf = spark.table(gold_table).orderBy("zone", "horizon_h").toPandas()
-    pdf.to_csv(export_path, index=False)
+    write_csv_extract(pdf, export_path)
     logger.info(
         "Scored %d rows into %s via %s; extract at %s", len(pdf), gold_table, model_uri, export_path
     )

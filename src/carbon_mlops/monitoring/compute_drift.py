@@ -30,7 +30,7 @@ import pandas as pd
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import build_horizon_features
 from carbon_mlops.ingestion.ingest_entsoe import ingest_bronze_snapshot
-from carbon_mlops.io.store import is_databricks_runtime, write_table
+from carbon_mlops.io.store import is_databricks_runtime, write_csv_extract, write_table
 from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
 from carbon_mlops.models.train import (
     DEFAULT_LGBM_PARAMS,
@@ -345,7 +345,7 @@ def write_monitoring(table: pd.DataFrame, cfg: CarbonMLOpsConfig) -> str:
     else:
         cfg.dashboard_data_dir.mkdir(parents=True, exist_ok=True)
         csv_path = str(Path(cfg.dashboard_data_dir) / MONITORING_CSV)
-    table.to_csv(csv_path, index=False, float_format="%.6g")
+    write_csv_extract(table, csv_path, float_format="%.6g")
     logger.info("Wrote %d monitoring rows; extract at %s", len(table), csv_path)
     return csv_path
 
