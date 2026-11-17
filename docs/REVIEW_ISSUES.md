@@ -367,6 +367,24 @@ First real output, 3-hour window, held-out period, 103 comparable days per zone:
 the median forecast was 18.9% (DE-LU) and 14.2% (FR) cleaner than the day's average, against 12.9%
 and 9.5% for "repeat yesterday's cleanest hours" and 25.4% and 18.7% in hindsight.
 
+### Business value columns, added 2026-11-17
+
+| ID | Item | Where | Status |
+| :--- | :--- | :--- | :--- |
+| W6 | Outcome in decision units: CO2 avoided per MWh moved for every candidate window; per strategy the mean and total avoided, the share of days the choice was dirtier than the day's average, the worst day, and the share of hindsight's value captured | `inference/dashboard_extracts.py` | verified locally (pending CI) |
+| W7 | Weekly value per strategy (`window_value_weekly.csv`, `gold_window_value_weekly`), to set beside weekly skill | `inference/dashboard_extracts.py` | verified locally (pending CI); **the workspace tables still have the old columns until the next deploy and run** |
+| W8 | The "cautious" strategy (choose by the upper bound) does not beat the median: in DE-LU it avoids 63.5 against 66.2 kg per MWh and is dirtier than the day's average on 12.6% of days against 6.8% | `dashboards/data/window_strategy_summary.csv` | finding, open. The interval is not shown to improve the choice of window; stated in the README |
+
+Held-out period, 3-hour window, 103 days: the median strategy avoided 66.2 kg CO2 per MWh moved in
+DE-LU and 5.2 in FR (yesterday rule: 46.6 and 3.4; hindsight: 89.2 and 6.7), captured 74% and 77% of
+hindsight's value, and was dirtier than the day's average on 6.8% and 9.7% of days (yesterday rule:
+22.3% and 15.5%). No annual or monetary figure is derived.
+
+Verification (2026-11-17): hand-computed tests for the new columns and for the weekly table, and the
+README test now checks the kg, bad-day and worst-day figures against the CSV; lint clean; 79 tests in
+about 13.6 s. Breakage audit: 82 of 82 caught, including 5 new cases for W6 and W7. The weekly table,
+weighted by its days, reproduces the period totals of the strategy summary to within 1%.
+
 Verification (2026-11-17): 7 unit tests with hand-computed answers plus a README consistency test;
 lint clean; 76 tests in about 12.8 s. Breakage audit: 74 of 74 caught, including 7 new cases for W1
 and W2. The 3-hour savings and the share of days cleaner than the day mean were recomputed from

@@ -51,8 +51,30 @@ that window actually emitted with the day's average. Held-out period, 103 days p
 
 The forecast beats the rule of thumb and captures about three quarters of what hindsight would
 allow. In summer (the validation period) the rule of thumb does almost as well in DE-LU, because
-the solar-driven daily pattern repeats. These are relative savings in intensity, not tonnes. All
-window lengths and both periods are in `dashboards/data/window_strategy_summary.csv`.
+the solar-driven daily pattern repeats.
+
+The same result in the units a decision needs. Intensity in gCO2eq/kWh is the same number as kg per
+MWh, so the difference between the day's average and the chosen window is the CO2 avoided per MWh
+moved into that window:
+
+| Zone | Strategy | Avoided per MWh moved | Days the choice was dirtier than the day's average | Worst day |
+| :--- | :--- | :--- | :--- | :--- |
+| DE-LU | Forecast (median) | 66.2 kg | 6.8% | 21.7% dirtier |
+| DE-LU | Repeat yesterday | 46.6 kg | 22.3% | 66.2% dirtier |
+| FR | Forecast (median) | 5.2 kg | 9.7% | 14.8% dirtier |
+| FR | Repeat yesterday | 3.4 kg | 15.5% | 29.5% dirtier |
+
+A load of 1 MWh a day would have avoided about 6.8 t CO2 over the 103 days in DE-LU and about 0.5 t
+in FR, where the grid is already so clean that timing matters little. The forecast's stronger
+argument is reliability: in DE-LU it backfires on a third as many days as the rule of thumb, and its
+worst day is a third as bad.
+
+Three limits. Choosing by the upper bound (the "cautious" strategy) did not help: in DE-LU it avoided
+less (63.5 kg) and backfired more often (12.6% of days) than choosing by the median, so on this
+evidence the interval informs how far to trust a forecast, not which window to pick. The figures
+cover September to December 2025 and are not scaled to a year. Nothing is said in euros: the project
+has no price data. All window lengths and both periods are in
+`dashboards/data/window_strategy_summary.csv`; weekly figures are in `window_value_weekly.csv`.
 
 ### Hypotheses
 

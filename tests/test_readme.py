@@ -94,7 +94,31 @@ def test_readme_window_savings_match_the_strategy_summary() -> None:
         row = next(ln for ln in README.splitlines() if ln.startswith(f"| {zone} | 3 h |"))
         for strategy in ("median", "yesterday", "hindsight"):
             assert f"{100 * saving.loc[zone, strategy]:.1f}%" in row, (zone, strategy)
+    labels = {"median": "Forecast (median)", "yesterday": "Repeat yesterday"}
+    by_key = held_out.set_index(["zone", "strategy"])
+    for (zone, strategy), label in ((k, labels[k[1]]) for k in by_key.index if k[1] in labels):
+        row = next(ln for ln in README.splitlines() if ln.startswith(f"| {zone} | {label} |"))
+        values = by_key.loc[(zone, strategy)]
+        assert f"{values['mean_avoided_kg_per_mwh']:.1f} kg" in row, (zone, strategy)
+        assert f"{100 * values['share_of_days_dirtier_than_day_mean']:.1f}%" in row, (
+            zone,
+            strategy,
+        )
+        assert f"{-100 * values['worst_day_saving_vs_day_mean']:.1f}% dirtier" in row, (
+            zone,
+            strategy,
+        )
+    cautious = by_key.loc[("DE-LU", "cautious")]
+    assert f"({cautious['mean_avoided_kg_per_mwh']:.1f} kg)" in README
+    assert f"({100 * cautious['share_of_days_dirtier_than_day_mean']:.1f}% of days)" in README
+    total = by_key.loc[("DE-LU", "median"), "total_avoided_kg_per_daily_mwh"]
+    assert f"about {total / 1000:.1f} t CO2" in README
     build_notes = (REPO_ROOT / "dashboards/README.md").read_text(encoding="utf-8")
-    for name in ("forecast_history.csv", "window_candidates.csv", "gold_monitoring.csv"):
+    for name in (
+        "forecast_history.csv",
+        "window_candidates.csv",
+        "window_value_weekly.csv",
+        "gold_monitoring.csv",
+    ):
         assert name in build_notes
         assert (REPO_ROOT / "dashboards/data" / name).exists()

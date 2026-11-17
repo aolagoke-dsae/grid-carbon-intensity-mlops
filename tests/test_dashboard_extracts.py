@@ -15,6 +15,7 @@ from carbon_mlops.inference.dashboard_extracts import (
     forecast_history_table,
     strategy_summary_table,
     window_candidates_table,
+    window_value_weekly_table,
     write_dashboard_extracts,
 )
 
@@ -160,6 +161,8 @@ def test_window_candidates_flag_each_strategy_and_score_it() -> None:
     assert best["realized_mean"] == pytest.approx(40.0)
     assert best["saving_vs_day_mean"] == pytest.approx(1 - 40.0 / 92.5)
     assert best["regret"] == 0.0
+    # Intensity in g/kWh equals kg/MWh: moving 1 MWh into the dip avoids 92.5 - 40 = 52.5 kg.
+    assert best["avoided_kg_per_mwh"] == pytest.approx(52.5)
     assert best["hindsight_rank"] == 1
     assert best["start_timestamp"] == pd.Timestamp("2025-10-01 11:00", tz=UTC)
     assert best["end_timestamp"] == pd.Timestamp("2025-10-01 14:00", tz=UTC)
@@ -169,6 +172,7 @@ def test_window_candidates_flag_each_strategy_and_score_it() -> None:
     assert wrong["regret"] == pytest.approx(60.0)
     assert wrong["saving_vs_day_mean"] == pytest.approx(1 - 100.0 / 92.5)
     assert wrong["saving_vs_day_mean"] < 0
+    assert wrong["avoided_kg_per_mwh"] == pytest.approx(-7.5)
 
 
 def test_yesterday_strategy_needs_the_previous_calendar_day() -> None:
@@ -203,6 +207,43 @@ def test_strategy_summary_compares_strategies_on_the_same_days() -> None:
     # Yesterday: day 2 repeats day 1's start (10, a miss); day 3 repeats day 2's (15, a hit).
     assert summary.loc["yesterday", "share_of_days_best_window"] == 0.5
 
+    # Business value. A hit avoids 92.5 - 40 = 52.5 kg per MWh; a miss costs 100 - 92.5 = 7.5.
+    assert summary.loc["hindsight", "mean_avoided_kg_per_mwh"] == pytest.approx(52.5)
+    assert summary.loc["hindsight", "total_avoided_kg_per_daily_mwh"] == pytest.approx(105.0)
+    assert summary.loc["median", "mean_avoided_kg_per_mwh"] == pytest.approx(22.5)
+    assert summary.loc["median", "total_avoided_kg_per_daily_mwh"] == pytest.approx(45.0)
+    assert summary.loc["median", "share_of_days_dirtier_than_day_mean"] == 0.5
+    assert summary.loc["median", "worst_day_saving_vs_day_mean"] == pytest.approx(saving_miss)
+    assert summary.loc["cautious", "share_of_days_dirtier_than_day_mean"] == 0.0
+    assert summary.loc["cautious", "worst_day_saving_vs_day_mean"] == pytest.approx(saving_hit)
+    assert summary.loc["hindsight", "share_of_hindsight_value_captured"] == pytest.approx(1.0)
+    assert summary.loc["median", "share_of_hindsight_value_captured"] == pytest.approx(45 / 105)
+    assert summary.loc["cautious", "share_of_hindsight_value_captured"] == pytest.approx(1.0)
+
+
+def test_weekly_value_groups_comparable_days_by_monday_week() -> None:
+    hit = (_dip(10), _dip(10), _dip(10))
+    miss = (_dip(4), _dip(4), _dip(10))  # the forecast points at the wrong hours
+    # Saturday 4 Oct has no "yesterday"; Sunday 5 Oct closes the week of 29 Sep; then Mon, Tue.
+    candidates = window_candidates_table(
+        _history({"2025-10-04": hit, "2025-10-05": hit, "2025-10-06": miss, "2025-10-07": hit}),
+        (3,),
+    )
+    weekly = window_value_weekly_table(candidates).set_index(["week_start", "strategy"])
+
+    assert sorted(weekly.index.get_level_values("week_start").unique()) == [
+        "2025-09-29",
+        "2025-10-06",
+    ]
+    assert (weekly.loc["2025-09-29", "n_days"] == 1).all()
+    assert (weekly.loc["2025-10-06", "n_days"] == 2).all()
+    assert weekly.loc[("2025-09-29", "median"), "mean_avoided_kg_per_mwh"] == pytest.approx(52.5)
+    # Week of 6 Oct: the median misses on Monday (-7.5) and hits on Tuesday (52.5).
+    assert weekly.loc[("2025-10-06", "median"), "mean_avoided_kg_per_mwh"] == pytest.approx(22.5)
+    assert weekly.loc[("2025-10-06", "median"), "share_of_days_dirtier_than_day_mean"] == 0.5
+    assert weekly.loc[("2025-10-06", "hindsight"), "mean_avoided_kg_per_mwh"] == pytest.approx(52.5)
+    assert weekly.loc[("2025-10-06", "yesterday"), "share_of_days_dirtier_than_day_mean"] == 0.0
+
 
 def test_write_dashboard_extracts_writes_csv_and_tables(tmp_path: Path) -> None:
     cfg = CarbonMLOpsConfig(local_data_dir=tmp_path, dashboard_data_dir=tmp_path / "dash")
@@ -212,6 +253,7 @@ def test_write_dashboard_extracts_writes_csv_and_tables(tmp_path: Path) -> None:
         "forecast_history.csv": _history({"2025-10-01": profile}),
         "window_candidates.csv": candidates,
         "window_strategy_summary.csv": strategy_summary_table(candidates),
+        "window_value_weekly.csv": window_value_weekly_table(candidates),
     }
     written = write_dashboard_extracts(tables, cfg)
 

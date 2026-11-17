@@ -6,7 +6,7 @@ Two dashboards, one per tool, with different jobs and no shared visuals.
 | :--- | :--- | :--- |
 | Question | When should I run my load tomorrow, and how sure is the forecast? | Is the model still trustworthy? |
 | Reader | An operator of flexible demand | Whoever maintains the model |
-| Files | `forecast_history.csv`, `window_candidates.csv`, `window_strategy_summary.csv` | `gold_monitoring.csv`, `locked_test_calibration.csv` |
+| Files | `forecast_history.csv`, `window_candidates.csv`, `window_strategy_summary.csv`, `window_value_weekly.csv` | `gold_monitoring.csv`, `locked_test_calibration.csv` |
 
 All files are in `dashboards/data/`. Neither dashboard computes a forecast or a statistic that
 matters: every number is produced by tested code and the tools only display it.
@@ -27,7 +27,7 @@ matters: every number is produced by tested code and the tools only display it.
 ## Refreshing the data
 
 ```bash
-python -m carbon_mlops.inference.dashboard_extracts   # forecast history, windows, strategy summary
+python -m carbon_mlops.inference.dashboard_extracts   # forecast history, windows, strategy summary, weekly value
 python -m carbon_mlops.monitoring.compute_drift       # gold_monitoring.csv
 ```
 
@@ -68,6 +68,13 @@ Filter every sheet on Zone, Forecast date and Window length.
 | 3 | Every possible start hour | Bar chart | From `window_candidates`: `start_horizon_h` on columns, `expected_p50` (or `expected_p95` when Risk is cautious) on rows. Colour by `Is recommended`. Add `realized_mean` as a dot on the same axis |
 | 4 | Did it pay off? | Calendar heatmap | From `window_candidates` filtered to `Is recommended`, ignoring the date parameter: week number on columns, weekday on rows, colour by `saving_vs_day_mean` with a diverging palette centred on zero |
 | 5 | Two grids, one day | Two small fan charts side by side | Same as visual 2 for both zones at once, **each with its own axis**. FR sits near 30 and DE-LU near 370, so a shared axis flattens FR |
+
+**Business value.** Intensity in gCO2eq/kWh is the same number as kg CO2 per MWh, so
+`avoided_kg_per_mwh` is the CO2 avoided by moving 1 MWh into a window. Add a parameter
+`Load (MWh per day)` and multiply: `avoided_kg_per_mwh * Load` for the chosen day, and
+`total_avoided_kg_per_daily_mwh * Load` from the summary for the whole period. Show the downside
+beside it: `share_of_days_dirtier_than_day_mean` and `worst_day_saving_vs_day_mean` per strategy.
+Do not scale the period to a year and do not convert to money; the project has no price data.
 
 Add a small table under visual 4 from `window_strategy_summary.csv` (filter `period = held_out` and
 the chosen window length): `strategy`, `mean_saving_vs_day_mean`, `share_of_days_cleaner_than_day_mean`.
@@ -160,13 +167,22 @@ CALCULATE (
 the lead time of the window's first hour (1 means 01:00 UTC). `expected_p50` and `expected_p95` are
 the forecast means over the window; `realized_mean` is what happened. `saving_vs_day_mean` is
 `1 - realized_mean / day_mean_realized`. `regret` is `realized_mean` minus that of the cleanest
-window in hindsight. `hindsight_rank` is 1 for the cleanest window of the day. The flags
+window in hindsight. `avoided_kg_per_mwh` is `day_mean_realized - realized_mean`: kg CO2 avoided per MWh moved into the
+window. `hindsight_rank` is 1 for the cleanest window of the day. The flags
 `recommended_median`, `recommended_cautious`, `recommended_yesterday` and `best_in_hindsight` mark
 each strategy's choice.
 
 `window_strategy_summary.csv`: per zone, period, window length and strategy: `n_days`,
 `mean_saving_vs_day_mean`, `share_of_days_cleaner_than_day_mean`, `mean_realized_intensity`,
-`mean_regret`, `share_of_days_best_window`, `median_hindsight_rank`.
+`mean_regret`, `share_of_days_best_window`, `median_hindsight_rank`, and the value columns:
+`mean_avoided_kg_per_mwh`; `total_avoided_kg_per_daily_mwh` (what a load of 1 MWh a day avoided over
+the period); `share_of_days_dirtier_than_day_mean`; `worst_day_saving_vs_day_mean` (negative means
+dirtier); `share_of_hindsight_value_captured` (the strategy's total as a share of hindsight's).
+
+`window_value_weekly.csv`: per zone, window length, week (`week_start`, a Monday) and strategy:
+`n_days`, `mean_avoided_kg_per_mwh`, `mean_saving_vs_day_mean`,
+`share_of_days_dirtier_than_day_mean`. Only days on which every strategy made a choice are counted,
+so a week can hold fewer than seven days. It links model health to value: plot it beside weekly skill.
 
 `gold_monitoring.csv` and `locked_test_calibration.csv` are described in the root `README.md` and in
 `docs/LOCKED_TEST_RESULTS.md`.

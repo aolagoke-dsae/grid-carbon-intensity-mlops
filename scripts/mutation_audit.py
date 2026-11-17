@@ -637,6 +637,43 @@ MUTATIONS: tuple[Mutation, ...] = (
         'write_csv_extract(table, csv_path, float_format="%.6g")',
         'table.to_csv(csv_path, index=False, float_format="%.6g")',
     ),
+    Mutation(
+        "W6",
+        "avoided emissions have the wrong sign",
+        EXTRACTS,
+        '"avoided_kg_per_mwh": day_mean - realized_mean,',
+        '"avoided_kg_per_mwh": realized_mean - day_mean,',
+    ),
+    Mutation(
+        "W6",
+        "bad days counted as the days that were cleaner",
+        EXTRACTS,
+        '(grp["saving_vs_day_mean"] < 0).mean()\n                ),\n'
+        '                "worst_day_saving_vs_day_mean"',
+        '(grp["saving_vs_day_mean"] > 0).mean()\n                ),\n'
+        '                "worst_day_saving_vs_day_mean"',
+    ),
+    Mutation(
+        "W6",
+        "worst day reported as the best day",
+        EXTRACTS,
+        '"worst_day_saving_vs_day_mean": float(grp["saving_vs_day_mean"].min()),',
+        '"worst_day_saving_vs_day_mean": float(grp["saving_vs_day_mean"].max()),',
+    ),
+    Mutation(
+        "W6",
+        "value captured measured against the strategy itself, not hindsight",
+        EXTRACTS,
+        'summary["total_avoided_kg_per_daily_mwh"] / summary["hindsight_total"]',
+        'summary["total_avoided_kg_per_daily_mwh"] / summary["total_avoided_kg_per_daily_mwh"]',
+    ),
+    Mutation(
+        "W6",
+        "weekly value grouped by calendar day instead of Monday week",
+        EXTRACTS,
+        '(day - pd.to_timedelta(day.dt.day_of_week, unit="D")).dt.strftime("%Y-%m-%d")',
+        'day.dt.strftime("%Y-%m-%d")',
+    ),
 )
 
 
