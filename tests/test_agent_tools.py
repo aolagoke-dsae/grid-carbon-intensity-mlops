@@ -359,3 +359,44 @@ def test_an_unusable_model_reply_falls_back_to_the_keyword_router(reply: str | E
     result = answer(question, CFG, router="llm", client=_client(reply), model="fake")
     assert result.router_used == "keyword (model reply rejected)"
     assert result.text == answer(question, CFG).text and result.grounded
+
+
+@pytest.mark.parametrize(
+    ("question", "guessed"),
+    [
+        (
+            "When is the cleanest time to run?",
+            '{"tool": "find_greenest_window", "args": {"zone": "DE-LU"}}',
+        ),
+        ("Is the model drifting?", '{"tool": "check_model_health", "args": {"zone": "DE-LU"}}'),
+    ],
+)
+def test_a_model_may_not_guess_a_zone_the_question_does_not_name(
+    question: str, guessed: str
+) -> None:
+    # Seen on four hosted models on 2026-11-18: with no zone in the question, each chose DE-LU.
+    reply = answer(question, CFG, router="llm", client=_client(guessed), model="fake")
+    assert reply.text == qa_agent.NEEDS_ZONE and reply.result is None
+    assert reply.router_used == "keyword (model reply rejected)"
+
+
+def test_a_model_may_not_swap_the_zone_the_question_names() -> None:
+    question = "What is the cleanest 4-hour window in France?"
+    wrong = '{"tool": "find_greenest_window", "args": {"zone": "DE-LU", "window_hours": 4}}'
+    reply = answer(question, CFG, router="llm", client=_client(wrong), model="fake")
+    assert reply.route is not None and reply.route.args["zone"] == "FR"
+    assert reply.text == answer(question, CFG).text
+
+
+def test_a_model_may_not_change_the_window_length_the_question_states() -> None:
+    # Seen on a hosted model on 2026-11-18: asked for 30 hours, it answered for 24.
+    question = "Find the best 30 hour window in Germany."
+    clamped = '{"tool": "find_greenest_window", "args": {"zone": "DE-LU", "window_hours": 24}}'
+    reply = answer(question, CFG, router="llm", client=_client(clamped), model="fake")
+    assert reply.text == qa_agent.BAD_REQUEST and reply.result is None
+
+    # A length written in words is the model's to read; digits in the question are not.
+    worded = "When should I charge for two hours in France?"
+    two = '{"tool": "find_greenest_window", "args": {"zone": "FR", "window_hours": 2}}'
+    by_model = answer(worded, CFG, router="llm", client=_client(two), model="fake")
+    assert by_model.router_used == "llm" and by_model.route.args["window_hours"] == 2

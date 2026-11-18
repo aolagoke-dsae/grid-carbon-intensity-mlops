@@ -73,7 +73,8 @@ Tools:
 - find_greenest_window: when to run a flexible load. args: zone ("DE-LU" or "FR"),
   window_hours (integer 1-24, default 3), choose_by ("median", or "cautious" for the upper bound).
 - compare_zones_24h: compare the two grids over the forecast day. args: {}
-- check_model_health: is the model still trustworthy. args: zone ("DE-LU" or "FR").
+- check_model_health: is the model still trustworthy: its coverage, its error against the
+  baseline, drift in its inputs. args: zone ("DE-LU" or "FR").
 - none: the question is about anything else (prices, weather, other countries, opinions).
 
 Germany or Luxembourg means "DE-LU". France means "FR". Never answer the question yourself and
@@ -104,6 +105,12 @@ class Answer:
 def _zone_in(text: str) -> str | None:
     found = [zone for zone, pattern in ZONE_PATTERNS.items() if re.search(pattern, text)]
     return found[0] if len(found) == 1 else None
+
+
+def _hours_in(text: str) -> int | None:
+    """The window length a question states in digits, such as "4-hour" or "6h"."""
+    hours = re.search(r"(\d+)\s*-?\s*(?:hours?|hrs?|h)\b", text)
+    return int(hours.group(1)) if hours else None
 
 
 def validate_route(route: Route, cfg: CarbonMLOpsConfig | None = None) -> Route | None:
@@ -141,10 +148,10 @@ def keyword_route(question: str, cfg: CarbonMLOpsConfig | None = None) -> Route 
     if re.search(WINDOW_WORDS, text):
         if zone is None:
             return NEEDS_ZONE
-        hours = re.search(r"(\d+)\s*-?\s*(?:hours?|hrs?|h)\b", text)
+        hours = _hours_in(text)
         args = {
             "zone": zone,
-            "window_hours": int(hours.group(1)) if hours else DEFAULT_WINDOW_HOURS,
+            "window_hours": hours if hours is not None else DEFAULT_WINDOW_HOURS,
             "choose_by": "cautious" if re.search(CAUTIOUS_WORDS, text) else "median",
         }
         return validate_route(Route("find_greenest_window", args), cfg) or BAD_REQUEST
@@ -173,7 +180,11 @@ def llm_route(
     model: str,
     cfg: CarbonMLOpsConfig | None = None,
 ) -> Route | None:
-    """Ask a chat model for a tool call. Returns None unless the reply is a valid route."""
+    """Ask a chat model for a tool call. Returns None unless the reply is a valid route.
+
+    A route is also rejected if it names a zone the question does not name, or a window length
+    other than the one the question states.
+    """
     try:
         reply = client.chat.completions.create(
             model=model,
@@ -188,7 +199,22 @@ def llm_route(
         logger.warning("Router model failed (%s); using the keyword router", type(exc).__name__)
         return None
     route = parse_route(content)
-    return validate_route(route, cfg) if route is not None else None
+    route = validate_route(route, cfg) if route is not None else None
+    if route is None:
+        return None
+    # Seen on hosted models: they pick a zone when the question names none, and shorten a
+    # window that is too long instead of refusing it. Neither is the model's call, so such a
+    # route is rejected and the keyword router asks, or refuses, in fixed words.
+    text = question.lower()
+    zone = route.args.get("zone")
+    if zone is not None and _zone_in(text) != zone:
+        logger.warning("Router model chose a zone the question does not name; rejected")
+        return None
+    stated = _hours_in(text)
+    if stated is not None and route.args.get("window_hours", stated) != stated:
+        logger.warning("Router model changed the window length the question states; rejected")
+        return None
+    return route
 
 
 def make_client(cfg: CarbonMLOpsConfig | None = None) -> tuple[Any, str]:

@@ -733,6 +733,20 @@ MUTATIONS: tuple[Mutation, ...] = (
         '    if route.tool not in ("find_greenest_window", "check_model_health"):\n'
         '        return Route("compare_zones_24h", {})',
     ),
+    Mutation(
+        "G4",
+        "a router model may guess a zone the question does not name",
+        AGENT,
+        "if zone is not None and _zone_in(text) != zone:",
+        "if False:",
+    ),
+    Mutation(
+        "G4",
+        "a router model may change the window length the question states",
+        AGENT,
+        'if stated is not None and route.args.get("window_hours", stated) != stated:',
+        "if False:",
+    ),
 )
 
 
