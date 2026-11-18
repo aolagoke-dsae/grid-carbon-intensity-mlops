@@ -53,6 +53,7 @@ def test_every_wheel_entry_point_resolves_to_a_no_argument_function() -> None:
         "carbon-score",
         "carbon-monitor",
         "carbon-extracts",
+        "carbon-agent-check",
     }
     for name, target in scripts.items():
         module_name, function_name = target.split(":")
@@ -73,7 +74,11 @@ def test_bundle_tasks_match_the_wheel_and_are_valid_for_serverless() -> None:
     assert "wheel" in bundle["artifacts"]["default"]["build"]
 
     jobs = bundle["resources"]["jobs"]
-    assert set(jobs) == {"carbon_training_pipeline", "carbon_batch_inference"}
+    assert set(jobs) == {
+        "carbon_training_pipeline",
+        "carbon_batch_inference",
+        "carbon_qa_agent_check",
+    }
     seen_entry_points: list[str] = []
     for job_name, job in jobs.items():
         environments = {env["environment_key"]: env["spec"] for env in job["environments"]}
@@ -195,3 +200,33 @@ def test_databricks_jobs_select_an_mlflow_experiment_explicitly(
     monkeypatch.setenv(train.EXPERIMENT_ENV_VAR, "/Users/someone/custom-experiment")
     assert train.ensure_mlflow_experiment() == "/Users/someone/custom-experiment"
     assert chosen == ["/Users/someone/custom-experiment"]
+
+
+def test_agent_check_job_saves_every_answer_and_fails_on_a_wrong_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import json
+
+    import mlflow
+
+    from carbon_mlops import jobs
+    from carbon_mlops.agent import qa_agent
+
+    mlflow.tracing.disable()
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    path = Path(jobs.run_agent_check_job(out_dir=tmp_path))
+    records = json.loads(path.read_text(encoding="utf-8"))
+    assert path.name == jobs.AGENT_ANSWERS_FILE and len(records) == 18
+    assert all(record["ok"] for record in records)
+    answered = [record for record in records if record["tool"]]
+    assert len(answered) == 11 and all(r["facts"] and r["source"] for r in answered)
+    # A refusal or a clarifying question carries no tool result and no figures.
+    assert all(r["facts"] is None for r in records if not r["tool"])
+
+    # An answer that is not the expected one stops the task, after the answers are saved.
+    monkeypatch.setattr(qa_agent, "render", lambda result: "Probably about 42.")
+    with pytest.raises(RuntimeError, match="window-default"):
+        jobs.run_agent_check_job(out_dir=tmp_path)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert [r["grounded"] for r in saved if r["tool"]] == [False] * 11
+    assert all(r["ok"] for r in saved if not r["tool"])

@@ -749,6 +749,13 @@ MUTATIONS: tuple[Mutation, ...] = (
         "if False:",
     ),
     Mutation(
+        "Q5",
+        "the agent check task passes although an answer is wrong",
+        JOBS,
+        "    if failed:",
+        "    if False:",
+    ),
+    Mutation(
         "S2",
         "the slide-data check ignores a changed result table",
         SLIDE_DATA,

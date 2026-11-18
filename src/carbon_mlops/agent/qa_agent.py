@@ -22,6 +22,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import mlflow
@@ -57,6 +58,7 @@ REFUSAL = (
     "outside them. I can tell you when the cleanest hours are in a zone's latest forecast, how the "
     "two grids compare over the forecast day, or whether the model is still healthy in a zone."
 )
+EVAL_QUESTIONS = Path(__file__).with_name("eval_questions.json")
 NEEDS_ZONE = "Which zone do you mean: Germany-Luxembourg (DE-LU) or France (FR)?"
 BAD_REQUEST = (
     "I cannot answer that as asked: the request is outside what the tools accept, for example an "
@@ -368,6 +370,41 @@ def answer(
         logger.error("Ungrounded numbers in a rendered answer: %s", violations)
         return Answer(UNGROUNDED, route, used, False, tuple(violations), result)
     return Answer(text, route, used, True, (), result)
+
+
+def evaluate(cfg: CarbonMLOpsConfig | None = None) -> list[dict[str, Any]]:
+    """Ask every evaluation question with the keyword router and record what came back.
+
+    Each record says whether the answer is what `eval_questions.json` expects (`ok`), and keeps
+    the tool's facts and source so the answer can be checked against the table it was read from.
+    """
+    cfg = cfg or CarbonMLOpsConfig()
+    cases = json.loads(EVAL_QUESTIONS.read_text(encoding="utf-8"))
+    fixed = {"clarify": NEEDS_ZONE, "bad_request": BAD_REQUEST, "refuse": REFUSAL}
+    records = []
+    for case in cases:
+        reply = answer(case["question"], cfg)
+        expect = case["expect"]
+        if "tool" in expect:
+            ok = reply.grounded and reply.route == Route(expect["tool"], expect["args"])
+        else:
+            ok = reply.result is None and reply.text == fixed[next(iter(expect))]
+        result = reply.result or {}
+        records.append(
+            {
+                "id": case["id"],
+                "question": case["question"],
+                "ok": bool(ok),
+                "grounded": reply.grounded,
+                "tool": reply.route.tool if reply.route else None,
+                "args": reply.route.args if reply.route else None,
+                "text": reply.text,
+                "facts": result.get("facts"),
+                "times": result.get("times"),
+                "source": result.get("source"),
+            }
+        )
+    return records
 
 
 def main() -> None:

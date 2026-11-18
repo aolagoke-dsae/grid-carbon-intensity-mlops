@@ -8,15 +8,19 @@ because a console entry point's return value is used as the process exit status.
 Task order on Databricks:
     carbon_training_pipeline:  ingest -> features -> train -> gate
     carbon_batch_inference:    recalibrate -> score, monitor, dashboard extracts
+    carbon_qa_agent_check:     agent check (reads the Gold tables the inference job wrote)
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 
 import pandas as pd
 from mlflow.tracking import MlflowClient
 
+from carbon_mlops.agent import qa_agent
 from carbon_mlops.config import CarbonMLOpsConfig
 from carbon_mlops.features.build_features import TRAINING_TABLE, run_feature_pipeline
 from carbon_mlops.inference import batch_score
@@ -25,17 +29,22 @@ from carbon_mlops.inference.dashboard_extracts import (
     write_dashboard_extracts,
 )
 from carbon_mlops.ingestion.ingest_entsoe import ingest_bronze_snapshot
-from carbon_mlops.io.store import read_table
+from carbon_mlops.io.store import is_databricks_runtime, read_table
 from carbon_mlops.models.evaluate_gate import GateDecision, evaluate_and_promote_champion
 from carbon_mlops.models.train import (
     TrainingArtifacts,
+    ensure_mlflow_experiment,
     load_registered_forecaster,
     recalibrate_forecaster,
     register_forecaster,
     resolve_model_name,
     train_split_cqr,
 )
-from carbon_mlops.monitoring.compute_drift import compute_monitoring, write_monitoring
+from carbon_mlops.monitoring.compute_drift import (
+    EXPORT_VOLUME,
+    compute_monitoring,
+    write_monitoring,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +175,45 @@ def run_dashboard_extracts_job(
     return write_dashboard_extracts(build_dashboard_extracts(champion, features, cfg), cfg)
 
 
+AGENT_ANSWERS_FILE = "qa_agent_answers.json"
+
+
+def run_agent_check_job(
+    cfg: CarbonMLOpsConfig | None = None, out_dir: str | Path | None = None
+) -> str:
+    """Ask the QA agent its evaluation questions against the current tables and save the answers.
+
+    On Databricks the agent reads the Gold tables and the answers go to the export volume, where
+    they can be compared with the tables. Raises if any answer is not the expected one or
+    contains a number its tool did not return. Returns the location of the answers file.
+    """
+    cfg = cfg or CarbonMLOpsConfig()
+    ensure_mlflow_experiment()
+    records = qa_agent.evaluate(cfg)
+    if out_dir is None:
+        if is_databricks_runtime():
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession.builder.getOrCreate()
+            spark.sql(f"CREATE VOLUME IF NOT EXISTS {cfg.catalog}.{cfg.schema}.{EXPORT_VOLUME}")
+            out_dir = f"/Volumes/{cfg.catalog}/{cfg.schema}/{EXPORT_VOLUME}"
+        else:
+            out_dir = cfg.local_data_dir
+    path = Path(out_dir) / AGENT_ANSWERS_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(records, indent=1, default=str), encoding="utf-8")
+    failed = [record["id"] for record in records if not record["ok"]]
+    logger.info(
+        "QA agent: %d of %d answers as expected; written to %s",
+        len(records) - len(failed),
+        len(records),
+        path,
+    )
+    if failed:
+        raise RuntimeError(f"QA agent answers not as expected: {failed}")
+    return str(path)
+
+
 def ingest_main() -> None:
     _configure_logging()
     ingest_bronze_snapshot()
@@ -200,6 +248,11 @@ def monitor_main() -> None:
 def extracts_main() -> None:
     _configure_logging()
     run_dashboard_extracts_job()
+
+
+def agent_check_main() -> None:
+    _configure_logging()
+    run_agent_check_job()
 
 
 def score_main() -> None:

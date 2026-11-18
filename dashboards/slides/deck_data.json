@@ -583,8 +583,8 @@
   }
  },
  "mlops": {
-  "tests": 126,
-  "breakages": 94,
+  "tests": 127,
+  "breakages": 95,
   "champion_version": 7,
   "recalibration_runs": 5
  },
