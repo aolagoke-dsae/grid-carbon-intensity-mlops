@@ -193,7 +193,7 @@ Three Serverless jobs are defined in `databricks.yml` and run from a wheel built
 | :--- | :--- |
 | `carbon_training_pipeline` | ingest, features, train, gate |
 | `carbon_batch_inference` | recalibrate the champion, then score with a Spark UDF, compute monitoring and write the dashboard extracts |
-| `carbon_qa_agent_check` | ask the QA agent its evaluation questions against the Gold tables and save the answers; fails if any is wrong or ungrounded. A second task repeats this with a hosted language model choosing the tool, and also fails if the model routed nothing |
+| `carbon_qa_agent_check` | ask the QA agent its evaluation questions against the Gold tables and save the answers; fails if any is wrong or ungrounded. A second task repeats this with a hosted language model choosing the tool (or with each model listed after `--models`), and also fails if a model routed nothing |
 
 ```bash
 databricks bundle deploy -t dev
@@ -260,7 +260,7 @@ changes no model.
 | Planned | Status |
 | :--- | :--- |
 | One Tableau and one Power BI dashboard | Not built. Their data files and per-visual build notes are in [dashboards/README.md](dashboards/README.md) |
-| The QA agent on live data | The agent and gate G4 are built and tested, and the agent runs on Databricks against the Gold tables, with the keyword router and with a hosted language model choosing the tool (18 of 18 evaluation questions each way, every question and model call traced). Those tables hold the static snapshot, so its "latest forecast" is from 31 December 2025. Inside Databricks one hosted model has been run; the other three were run only from a laptop |
+| The QA agent on live data | The agent and gate G4 are built and tested, and the agent runs on Databricks against the Gold tables, with the keyword router and with a hosted language model choosing the tool (18 of 18 evaluation questions each way, every question and model call traced). Those tables hold the static snapshot, so its "latest forecast" is from 31 December 2025. Four hosted models have been run this way inside Databricks, each with the same 18 answers |
 | Day-ahead prices, load and flows as features | Deferred; the snapshot does not export them |
 
 Open limitations and every issue found in review are tracked in

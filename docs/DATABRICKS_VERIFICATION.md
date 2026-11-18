@@ -350,7 +350,32 @@ questions with `databricks-meta-llama-3-3-70b-instruct` choosing the tool, one c
   by the model also hold a tool span.
 
 Not covered: the other three hosted models inside Databricks (run from a laptop only), and live
-data.
+data. The three models were run later the same day, as described next.
+
+### 2026-11-18, the other three hosted models (run `177777806325340`)
+
+Deployed from local commit `555a28f`, not pushed at the time, so GitHub Actions had not run on it.
+The deploy changed no job definition, only the wheel: the model task now accepts a list of models.
+Only that task was run (`--only qa_agent_check_llm`), with the three models passed at run time, so
+the keyword task did not run again. No model was trained, recalibrated or promoted.
+
+The run took 273 s and ended in SUCCESS.
+
+| Model | Answers as expected | Routed by the model | Rejected by a guard |
+| :--- | :--- | :--- | :--- |
+| `databricks-meta-llama-3-1-8b-instruct` | 18 of 18 | 11 | 2 (zone not named in the question) |
+| `databricks-gpt-oss-20b` | 18 of 18 | 11 | 3 (2 zone, 1 window length changed from 30 hours) |
+| `databricks-qwen3-next-80b-a3b-instruct` | 18 of 18 | 11 | 2 (zone not named in the question) |
+
+- Checked from outside the job, on the three answer files downloaded from the volume: each model's
+  18 answers are identical, in text, facts, times and source, to the keyword task's answers from
+  run `72536925330920`.
+- The run added exactly 54 traces (68 before, 122 after), all with state OK. Each holds one
+  model-call span of type `CHAT_MODEL`, 18 per model, and the 33 routed by a model also hold a
+  tool span.
+
+Not covered: live data. The bundle itself still names no list of models, so a run without
+`--models` uses the default model only.
 
 ### Still unverified after these runs
 
