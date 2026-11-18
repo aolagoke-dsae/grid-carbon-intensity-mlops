@@ -16,8 +16,8 @@ can we be?*
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
 > - **Not finished:** the two dashboards are not built (their data and build notes exist). The QA agent
->   is built and tested, and has been run with four hosted models and traced to the workspace, but
->   only from a laptop: it has not been run inside Databricks against the live tables.
+>   is built, tested and run on Databricks against the Gold tables; its language-model router has
+>   been run with four hosted models, but only from a laptop.
 
 ## Results at a glance
 
@@ -187,17 +187,19 @@ Do not use `--run`: the analysis plan allows one execution, and it has been used
 
 ## Databricks
 
-Two Serverless jobs are defined in `databricks.yml` and run from a wheel built from this repository.
+Three Serverless jobs are defined in `databricks.yml` and run from a wheel built from this repository.
 
 | Job | Tasks |
 | :--- | :--- |
 | `carbon_training_pipeline` | ingest, features, train, gate |
 | `carbon_batch_inference` | recalibrate the champion, then score with a Spark UDF, compute monitoring and write the dashboard extracts |
+| `carbon_qa_agent_check` | ask the QA agent its evaluation questions against the Gold tables and save the answers; fails if any is wrong or ungrounded |
 
 ```bash
 databricks bundle deploy -t dev
 databricks bundle run -t dev carbon_training_pipeline
 databricks bundle run -t dev carbon_batch_inference
+databricks bundle run -t dev carbon_qa_agent_check
 ```
 
 Both jobs were run end to end on a Databricks Free Edition workspace on 15 November 2026, before the
@@ -258,7 +260,7 @@ changes no model.
 | Planned | Status |
 | :--- | :--- |
 | One Tableau and one Power BI dashboard | Not built. Their data files and per-visual build notes are in [dashboards/README.md](dashboards/README.md) |
-| The QA agent running inside Databricks | The agent and gate G4 are built and tested. Run from a laptop, the model router answered 18 of 18 evaluation questions on each of four Databricks hosted models, and three questions were traced to an MLflow experiment on the workspace and read back. It has not been run as a workspace job or notebook, so it has only ever read the committed snapshots, not the live Gold tables |
+| The QA agent with a language model inside Databricks | The agent and gate G4 are built and tested, and the agent runs on Databricks against the Gold tables with its keyword router (18 of 18 evaluation questions, each traced). The model router has answered 18 of 18 on four hosted models, but only when called from a laptop; it has not been run inside Databricks, and the model call itself is not traced |
 | Day-ahead prices, load and flows as features | Deferred; the snapshot does not export them |
 
 Open limitations and every issue found in review are tracked in

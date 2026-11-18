@@ -715,11 +715,11 @@ def s07():
 def s08():
     m = D["mlops"]
     s = new_slide("MLOps on Databricks" if INTERVIEW else "Backup: MLOps on Databricks", "Every claim is enforced by a gate, a test or a deliberate breakage",
-                  "Two jobs, deployed as one Databricks Asset Bundle on serverless compute; models and tables governed in Unity Catalog.",
+                  "Two pipeline jobs, deployed as one Databricks Asset Bundle on serverless compute; models and tables governed in Unity Catalog.",
                   notes=(
-        "Two jobs run on Databricks. The training job ingests, builds features, trains a challenger and puts it through the "
+        "Two pipeline jobs run on Databricks. The training job ingests, builds features, trains a challenger and puts it through the "
         "gate. The inference job recalibrates the champion on the latest errors, then scores the next 24 hours, computes "
-        "monitoring and writes the dashboard extracts. Three gates guard the pipeline: the data file's hash is pinned, no "
+        "monitoring and writes the dashboard extracts. A third, small job checks the question-answering agent. Three gates guard the pipeline: the data file's hash is pinned, no "
         "feature may come from after the moment of forecasting, and a model is promoted only if it passes the coverage, skill "
         f"and champion checks. There are {m['tests']} tests. To know the tests themselves are any good, a script breaks the code "
         f"on purpose, one line at a time, {m['breakages']} ways, and every one of those breakages is caught."))
@@ -808,7 +808,7 @@ def s10():
         "Can we trust the interval? Mostly: it covers close to the 90% it promises, and the weak spots are named. "
         f"Does acting on it pay? In Germany, yes: {v['tonnes']['DE-LU'][2]} tonnes of CO2 avoided per daily megawatt-hour over the test period, "
         "and it backfires a third as often as the rule of thumb. Next come a retraining schedule, the two dashboards, and "
-        "running the question-answering agent, which is built and tested, on the live tables. Thank you."))
+        "live data for the question-answering agent, which already runs on Databricks. Thank you."))
     text(s, 0.5, 1.27, 12.33, 0.4, "All figures from the held-out test, 13 September to 31 December 2025.", size=14, color="bg2", name="Subtitle")
     answers = [
         (QUESTIONS[0], "Yes", f"Median error {sm['skill']['DE-LU']:.0f}% lower than “no change” in DE-LU and {sm['skill']['FR']:.0f}% lower in FR. The edge narrows in winter."),
@@ -824,7 +824,7 @@ def s10():
         text(s, bx + 0.22, y0 + 0.9, w - 0.44, 0.85, a, size=40, bold=True, color="pri", anchor="middle", name=f"Answer {i + 1}")
         text(s, bx + 0.22, y0 + 1.95, w - 0.44, 1.5, body, size=14, name=f"Answer {i + 1} detail")
     text(s, 0.5, 5.55, 12.33, 0.9, [
-        [("Next  ", {"bold": True, "color": "bg1"}), ("a retraining schedule · the two dashboards · the question-answering agent on live tables", {})],
+        [("Next  ", {"bold": True, "color": "bg1"}), ("a retraining schedule · the two dashboards · live data for the question-answering agent", {})],
         [("Code  ", {"bold": True, "color": "bg1"}), ("github.com/aolagoke-dsae/grid-carbon-intensity-mlops · upstream: github.com/aolagoke-dsae/grid-carbon-intensity", {})],
         [(SOURCE, {"size": 10})],
     ], size=13, color="bg2", spacing=5, name="Next steps and source")
@@ -1451,14 +1451,14 @@ def b09():
         "fading towards winter. Second live ingestion, replacing the pinned snapshot with scheduled pulls that are hashed the "
         "same way. Third, published day-ahead schedules and prices as features, which the snapshot does not carry. Fourth, alerts "
         "wired to the monitoring table. Fifth, the question-answering agent. It is built and tested: a language model only chooses "
-        "which tested tool to call, and every number in an answer comes from that tool. So far it has run from a laptop on saved "
-        "tables; the remaining step is to run it inside Databricks on the live ones."))
+        "which tested tool to call, and every number in an answer comes from that tool. It runs on Databricks against the "
+        "forecast tables with keyword routing. What remains is the language-model router there, and live data."))
     table(s, 0.5, 2.0, 12.33, [0.6, 3.2, 5.2, 3.3], ["", "Gap", "What it would take", "Why it comes in this order"], [
         ["1", "Retraining schedule", "Retrain monthly on a rolling window; the gate already decides promotion", "Monitoring shows skill fading towards winter"],
         ["2", "Live ingestion", "Scheduled API pulls, each response hashed as upstream does", "Removes the fixed end date of 31 December 2025"],
         ["3", "Forward-looking features", "Day-ahead generation schedules, load forecasts and prices", "The likeliest source of better day-ahead skill, especially in FR"],
         ["4", "Alerting", "Rules on the monitoring table: runs of weeks outside the band", "The numbers exist; nobody is told yet"],
-        ["5", "Question-answering agent in service", "Built and tested, so far run from a laptop on saved tables; run it inside Databricks, with the model call traced", "Useful only once the tables are live"],
+        ["5", "Question-answering agent in service", "Runs on Databricks against the forecast tables with keyword routing; add the language-model router there, with the model call traced", "Useful only once the tables are live"],
     ], name="Production gaps", size=12, row_h=0.68)
     back_link(s)
 

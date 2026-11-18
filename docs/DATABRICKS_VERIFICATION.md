@@ -299,6 +299,35 @@ Held-out period, 3-hour window, CO2 avoided per MWh moved, workspace against loc
 The differences are G17 again (the workspace model is a different fit). The conclusions hold on both
 platforms, including W8: the cautious strategy avoids less than the median and backfires more often.
 
+### 2026-11-18, QA agent check on the workspace (runs `868631481796785`, `296832682509939`)
+
+Deployed from local commits `5f6ac5d` and then `6f9098b`, neither pushed at the time, so GitHub
+Actions had not run on them. The deploy added a third job, `carbon_qa_agent_check`, and left the
+other two unchanged. No model was trained, recalibrated or promoted; the champion is still version 7.
+
+| Run | Result |
+| :--- | :--- |
+| `868631481796785` (`5f6ac5d`) | SUCCESS, 92 s. 18 of 18 answers as expected, read from `gold_forecasts` and `gold_monitoring`; answers written to the volume as `qa_agent_answers.json`. **Only 14 of 18 traces arrived** |
+| `296832682509939` (`6f9098b`, with the trace flush) | SUCCESS, 59 s. 18 of 18 answers; exactly 18 new traces, all with state OK |
+
+Checked from outside the job, on files downloaded from the volume:
+
+- The agent's tools, run locally on `latest_24h_forecasts.csv` and `gold_monitoring.csv` from the
+  volume, return the same facts as the job recorded: 8 of 11 answers exactly, and the 3 model-health
+  answers to within 2 parts in a million, which is the 6 significant figures the CSV keeps.
+- The cleanest 3-hour window in DE-LU, worked out with pandas alone: it starts at 00:00 UTC on
+  1 January 2026 with a mean of 274.558 gCO2eq/kWh against a day mean of 309.784. The job's answer has
+  the same start and the same two figures.
+- The 7 questions with no tool answer (4 out of scope, 2 with no zone, 1 impossible window) were
+  refused or clarified in the fixed wording, with no tool result.
+
+The workspace answers differ from the local ones, as expected: the Gold table's forecast was issued
+at 22:00 UTC on 31 December 2025, and the workspace champion is a different fit (G17). For FR the
+latest week's coverage is 90.1% on the workspace against 88.6% locally.
+
+Not covered by these runs: the language-model router inside Databricks (the task uses the keyword
+router, and no model-serving credentials are passed to it), and tracing of the model call.
+
 ### Still unverified after these runs
 
 - The model-version tags (`gate_decision`, `recalibrated_from_version`, `calibrated_through`).
