@@ -16,8 +16,8 @@ can we be?*
 > - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
 > - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
 > - **Not finished:** the two dashboards are not built (their data and build notes exist). The QA agent
->   is built and tested, and its model router has been run against four hosted models; its MLflow
->   traces have not been checked on Databricks.
+>   is built and tested, and has been run with four hosted models and traced to the workspace, but
+>   only from a laptop: it has not been run inside Databricks against the live tables.
 
 ## Results at a glance
 
@@ -256,7 +256,7 @@ changes no model.
 | Planned | Status |
 | :--- | :--- |
 | One Tableau and one Power BI dashboard | Not built. Their data files and per-visual build notes are in [dashboards/README.md](dashboards/README.md) |
-| MLflow traces of the QA agent on Databricks | The agent and gate G4 are built and tested, and the model router has been run against four Databricks hosted models (18 of 18 evaluation questions on each). Its traces have been inspected locally only, not on the workspace |
+| The QA agent running inside Databricks | The agent and gate G4 are built and tested. Run from a laptop, the model router answered 18 of 18 evaluation questions on each of four Databricks hosted models, and three questions were traced to an MLflow experiment on the workspace and read back. It has not been run as a workspace job or notebook, so it has only ever read the committed snapshots, not the live Gold tables |
 | Day-ahead prices, load and flows as features | Deferred; the snapshot does not export them |
 
 Open limitations and every issue found in review are tracked in
