@@ -398,15 +398,20 @@ def pct(v: float, d: int = 0) -> str:
 
 
 # ================================================================ title page
+# The title as registered for the talk. The slide and the file's properties both use it.
+TALK_TITLE = "When is electricity clean, and does shifting load pay off in CO₂?"
+
+
 def s00():
     f = D["fan"]
-    s = new_slide("Probabilistic forecasting and MLOps", "When is electricity clean?", dark=True, notes=(
+    s = new_slide("Probabilistic forecasting and MLOps", TALK_TITLE, dark=True, notes=(
         "Good morning. Electricity is not equally clean at every hour, and that is the opportunity this project is about. "
         "I forecast, a day ahead and hour by hour, how much CO2 a kilowatt-hour will carry in Germany-Luxembourg and in France, "
         "with a 90% interval, and I run it as a tested pipeline on Databricks. The curve on the right is one real forecast."))
     title = s.shapes.title
-    title.top, title.width, title.height = Inches(2.05), Inches(6.6), Inches(1.5)
-    title.text_frame.paragraphs[0].runs[0].font.size = Pt(48)
+    # Two lines at this size; the box ends just above the subtitle at 3.75.
+    title.top, title.width, title.height = Inches(2.3), Inches(6.6), Inches(1.3)
+    title.text_frame.paragraphs[0].runs[0].font.size = Pt(32)
     text(s, 0.5, 3.75, 6.3, 1.1, "A 24-hour forecast of grid carbon intensity for Germany-Luxembourg and France, "
          "with an interval you can check.", size=20, color="bg2", name="Subtitle")
     text(s, 0.5, 5.55, 6.3, 1.2, [
@@ -1502,7 +1507,7 @@ for build in ORDER:
 assert len(prs.slides) == len(ORDER)
 for item, target in PENDING_LINKS:
     item.click_action.target_slide = prs.slides[target - 1]
-prs.core_properties.title = "When is electricity clean? A 24-hour forecast of grid carbon intensity"
+prs.core_properties.title = TALK_TITLE.replace("₂", "2")
 prs.core_properties.author = "Dr. Adewole Olagoke"
 prs.core_properties.subject = "Probabilistic forecasting of grid carbon intensity for DE-LU and FR"
 _ = copy  # kept for local experiments with duplicated shapes
