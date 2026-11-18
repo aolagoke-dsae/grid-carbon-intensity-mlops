@@ -108,6 +108,8 @@ resources:
 
     # Run after the inference job: the agent answers its evaluation questions from the Gold
     # tables that job wrote, and the task fails if any answer is wrong or ungrounded.
+    # The second task asks the same questions with a hosted language model choosing the tool.
+    # It calls that model once per question, under the job's own identity (no stored token).
     carbon_qa_agent_check:
       name: "[${bundle.target}] carbon-qa-agent-check"
       environments:
@@ -117,9 +119,17 @@ resources:
             dependencies:
               - ./dist/*.whl
               - databricks-feature-engineering
+              - openai>=1.45.0
       tasks:
         - task_key: qa_agent_check
           environment_key: default
           python_wheel_task:
             package_name: grid_carbon_intensity_mlops
             entry_point: carbon-agent-check
+        - task_key: qa_agent_check_llm
+          depends_on:
+            - task_key: qa_agent_check
+          environment_key: default
+          python_wheel_task:
+            package_name: grid_carbon_intensity_mlops
+            entry_point: carbon-agent-check-llm

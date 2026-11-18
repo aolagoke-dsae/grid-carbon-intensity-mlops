@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -222,18 +223,29 @@ def llm_route(
 def make_client(cfg: CarbonMLOpsConfig | None = None) -> tuple[Any, str]:
     """An OpenAI-compatible client and model name for the configured backend.
 
-    Credentials come from the environment only: `DATABRICKS_HOST` and `DATABRICKS_TOKEN` for
-    Databricks model serving; none are needed for a local Ollama server.
+    No credential is stored. For Databricks model serving they come from `DATABRICKS_HOST` and
+    `DATABRICKS_TOKEN` when both are set, and otherwise from the Databricks SDK's own
+    authentication: the job's identity inside Databricks, a CLI profile on a laptop. None are
+    needed for a local Ollama server.
     """
     from openai import OpenAI  # optional dependency: pip install .[agent]
 
     cfg = cfg or CarbonMLOpsConfig()
     if cfg.llm_backend == "databricks":
-        host = os.environ["DATABRICKS_HOST"].rstrip("/")
-        client = OpenAI(
-            base_url=f"{host}/serving-endpoints", api_key=os.environ["DATABRICKS_TOKEN"]
-        )
-        return client, os.getenv("CARBON_LLM_MODEL", DEFAULT_DATABRICKS_MODEL)
+        model = os.getenv("CARBON_LLM_MODEL", DEFAULT_DATABRICKS_MODEL)
+        if "DATABRICKS_HOST" in os.environ and "DATABRICKS_TOKEN" in os.environ:
+            host = os.environ["DATABRICKS_HOST"].rstrip("/")
+            return OpenAI(
+                base_url=f"{host}/serving-endpoints", api_key=os.environ["DATABRICKS_TOKEN"]
+            ), model
+        from databricks.sdk import WorkspaceClient
+
+        # A short-lived token for this process, taken from the SDK's request headers. It is
+        # never written anywhere, and it outlasts the minute or two a check takes.
+        workspace = WorkspaceClient().config
+        token = workspace.authenticate()["Authorization"].removeprefix("Bearer ")
+        host = workspace.host.rstrip("/")
+        return OpenAI(base_url=f"{host}/serving-endpoints", api_key=token), model
     return OpenAI(base_url=cfg.ollama_base_url, api_key="ollama"), cfg.ollama_model
 
 
@@ -372,18 +384,28 @@ def answer(
     return Answer(text, route, used, True, (), result)
 
 
-def evaluate(cfg: CarbonMLOpsConfig | None = None) -> list[dict[str, Any]]:
-    """Ask every evaluation question with the keyword router and record what came back.
+def evaluate(
+    cfg: CarbonMLOpsConfig | None = None,
+    router: str = "keyword",
+    client: Any = None,
+    model: str | None = None,
+    pause_s: float = 0.0,
+) -> list[dict[str, Any]]:
+    """Ask every evaluation question and record what came back.
 
-    Each record says whether the answer is what `eval_questions.json` expects (`ok`), and keeps
-    the tool's facts and source so the answer can be checked against the table it was read from.
+    Each record says whether the answer is what `eval_questions.json` expects (`ok`), which
+    router produced the route (`router_used`), and keeps the tool's facts and source so the
+    answer can be checked against the table it was read from. `pause_s` spaces out the calls to
+    a hosted model, which is rate-limited.
     """
     cfg = cfg or CarbonMLOpsConfig()
     cases = json.loads(EVAL_QUESTIONS.read_text(encoding="utf-8"))
     fixed = {"clarify": NEEDS_ZONE, "bad_request": BAD_REQUEST, "refuse": REFUSAL}
     records = []
     for case in cases:
-        reply = answer(case["question"], cfg)
+        if router == "llm" and pause_s > 0:
+            time.sleep(pause_s)
+        reply = answer(case["question"], cfg, router=router, client=client, model=model)
         expect = case["expect"]
         if "tool" in expect:
             ok = reply.grounded and reply.route == Route(expect["tool"], expect["args"])
@@ -396,6 +418,7 @@ def evaluate(cfg: CarbonMLOpsConfig | None = None) -> list[dict[str, Any]]:
                 "question": case["question"],
                 "ok": bool(ok),
                 "grounded": reply.grounded,
+                "router_used": reply.router_used,
                 "tool": reply.route.tool if reply.route else None,
                 "args": reply.route.args if reply.route else None,
                 "text": reply.text,

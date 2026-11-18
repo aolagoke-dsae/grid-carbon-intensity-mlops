@@ -756,6 +756,20 @@ MUTATIONS: tuple[Mutation, ...] = (
         "    if False:",
     ),
     Mutation(
+        "Q10",
+        "the model-router check passes although the model routed nothing",
+        JOBS,
+        '    if router == "llm" and by_model == 0:',
+        "    if False:",
+    ),
+    Mutation(
+        "Q10",
+        "the model-router check never hands the questions to the model",
+        AGENT,
+        'reply = answer(case["question"], cfg, router=router, client=client, model=model)',
+        'reply = answer(case["question"], cfg)',
+    ),
+    Mutation(
         "S2",
         "the slide-data check ignores a changed result table",
         SLIDE_DATA,

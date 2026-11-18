@@ -8,14 +8,17 @@ because a console entry point's return value is used as the process exit status.
 Task order on Databricks:
     carbon_training_pipeline:  ingest -> features -> train -> gate
     carbon_batch_inference:    recalibrate -> score, monitor, dashboard extracts
-    carbon_qa_agent_check:     agent check (reads the Gold tables the inference job wrote)
+    carbon_qa_agent_check:     agent check -> agent check with the model router
+                               (both read the Gold tables the inference job wrote)
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import mlflow
 import pandas as pd
@@ -179,18 +182,36 @@ def run_dashboard_extracts_job(
 AGENT_ANSWERS_FILE = "qa_agent_answers.json"
 
 
+AGENT_LLM_ANSWERS_FILE = "qa_agent_answers_llm.json"
+ROUTER_PAUSE_S = 2.5  # hosted models are rate-limited; unpaced calls were refused with HTTP 429
+
+
 def run_agent_check_job(
-    cfg: CarbonMLOpsConfig | None = None, out_dir: str | Path | None = None
+    cfg: CarbonMLOpsConfig | None = None,
+    out_dir: str | Path | None = None,
+    router: str = "keyword",
+    client: Any = None,
+    model: str | None = None,
+    pause_s: float = ROUTER_PAUSE_S,
 ) -> str:
     """Ask the QA agent its evaluation questions against the current tables and save the answers.
 
     On Databricks the agent reads the Gold tables and the answers go to the export volume, where
     they can be compared with the tables. Raises if any answer is not the expected one or
     contains a number its tool did not return. Returns the location of the answers file.
+
+    With `router="llm"` a hosted language model chooses the tool, and each model call is traced.
+    The run then also fails if the model routed no question at all: every answer would have come
+    from the keyword fallback, and the run would say nothing about the model.
     """
     cfg = cfg or CarbonMLOpsConfig()
     ensure_mlflow_experiment()
-    records = qa_agent.evaluate(cfg)
+    if router == "llm" and client is None:
+        if is_databricks_runtime():
+            cfg = replace(cfg, llm_backend="databricks")
+        mlflow.openai.autolog()
+        client, model = qa_agent.make_client(cfg)
+    records = qa_agent.evaluate(cfg, router=router, client=client, model=model, pause_s=pause_s)
     # Traces are sent in the background. Without this the task can end first: the first
     # workspace run kept only 14 of its 18 traces.
     mlflow.flush_trace_async_logging()
@@ -203,18 +224,23 @@ def run_agent_check_job(
             out_dir = f"/Volumes/{cfg.catalog}/{cfg.schema}/{EXPORT_VOLUME}"
         else:
             out_dir = cfg.local_data_dir
-    path = Path(out_dir) / AGENT_ANSWERS_FILE
+    path = Path(out_dir) / (AGENT_LLM_ANSWERS_FILE if router == "llm" else AGENT_ANSWERS_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(records, indent=1, default=str), encoding="utf-8")
     failed = [record["id"] for record in records if not record["ok"]]
+    by_model = sum(record["router_used"] == "llm" for record in records)
     logger.info(
-        "QA agent: %d of %d answers as expected; written to %s",
+        "QA agent (%s router): %d of %d answers as expected, %d routed by the model; written to %s",
+        router,
         len(records) - len(failed),
         len(records),
+        by_model,
         path,
     )
     if failed:
         raise RuntimeError(f"QA agent answers not as expected: {failed}")
+    if router == "llm" and by_model == 0:
+        raise RuntimeError("The router model routed no question; every answer used the fallback")
     return str(path)
 
 
@@ -257,6 +283,11 @@ def extracts_main() -> None:
 def agent_check_main() -> None:
     _configure_logging()
     run_agent_check_job()
+
+
+def agent_check_llm_main() -> None:
+    _configure_logging()
+    run_agent_check_job(router="llm")
 
 
 def score_main() -> None:

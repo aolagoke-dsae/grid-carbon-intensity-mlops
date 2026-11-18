@@ -54,6 +54,7 @@ def test_every_wheel_entry_point_resolves_to_a_no_argument_function() -> None:
         "carbon-monitor",
         "carbon-extracts",
         "carbon-agent-check",
+        "carbon-agent-check-llm",
     }
     for name, target in scripts.items():
         module_name, function_name = target.split(":")
@@ -121,6 +122,11 @@ def test_bundle_tasks_match_the_wheel_and_are_valid_for_serverless() -> None:
     ]
     assert scoring["spark_udf_batch_score"]["depends_on"] == [{"task_key": "recalibrate_champion"}]
     assert jobs["carbon_batch_inference"]["schedule"]["pause_status"] == "PAUSED"
+    agent = {t["task_key"]: t for t in jobs["carbon_qa_agent_check"]["tasks"]}
+    assert agent["qa_agent_check_llm"]["depends_on"] == [{"task_key": "qa_agent_check"}]
+    # The model-router task imports the OpenAI client, which serverless does not guarantee.
+    agent_env = jobs["carbon_qa_agent_check"]["environments"][0]["spec"]["dependencies"]
+    assert any(dep.startswith("openai") for dep in agent_env)
 
 
 def test_wheel_ships_the_pinned_snapshot_beside_the_package() -> None:
@@ -233,3 +239,48 @@ def test_agent_check_job_saves_every_answer_and_fails_on_a_wrong_one(
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert [r["grounded"] for r in saved if r["tool"]] == [False] * 11
     assert all(r["ok"] for r in saved if not r["tool"])
+
+
+def test_agent_check_with_a_model_router_fails_when_the_model_routes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import json
+    from types import SimpleNamespace
+
+    import mlflow
+
+    from carbon_mlops import jobs
+    from carbon_mlops.agent import qa_agent
+
+    def client(fail: bool) -> SimpleNamespace:
+        def create(**kwargs: object) -> SimpleNamespace:
+            if fail:
+                raise ConnectionError("no model")
+            route = qa_agent.keyword_route(kwargs["messages"][-1]["content"])
+            content = (
+                json.dumps({"tool": route.tool, "args": route.args})
+                if isinstance(route, qa_agent.Route)
+                else '{"tool": "none"}'
+            )
+            message = SimpleNamespace(content=content)
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+    mlflow.tracing.disable()
+    monkeypatch.setattr(jobs.mlflow, "flush_trace_async_logging", lambda: None)
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    run = {"out_dir": tmp_path, "router": "llm", "model": "fake", "pause_s": 0}
+
+    path = Path(jobs.run_agent_check_job(client=client(fail=False), **run))
+    records = json.loads(path.read_text(encoding="utf-8"))
+    assert path.name == jobs.AGENT_LLM_ANSWERS_FILE
+    assert all(record["ok"] for record in records)
+    assert [r["router_used"] for r in records].count("llm") == 11
+
+    # A model that never answers leaves every route to the fallback. The answers are still
+    # right, so only this check stops the run from passing without having tested the model.
+    with pytest.raises(RuntimeError, match="routed no question"):
+        jobs.run_agent_check_job(client=client(fail=True), **run)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert all(r["ok"] and r["router_used"] != "llm" for r in saved)
