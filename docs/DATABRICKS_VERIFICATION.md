@@ -326,7 +326,31 @@ at 22:00 UTC on 31 December 2025, and the workspace champion is a different fit 
 latest week's coverage is 90.1% on the workspace against 88.6% locally.
 
 Not covered by these runs: the language-model router inside Databricks (the task uses the keyword
-router, and no model-serving credentials are passed to it), and tracing of the model call.
+router, and no model-serving credentials are passed to it), and tracing of the model call. Both were covered
+later the same day, in the run described next.
+
+### 2026-11-18, QA agent check with the model router (run `72536925330920`)
+
+Deployed from local commit `81caef0`, not pushed at the time, so GitHub Actions had not run on it.
+The deploy changed one job, `carbon_qa_agent_check`: it gained a second task, `qa_agent_check_llm`,
+and the `openai` package in its environment. No model was trained, recalibrated or promoted.
+
+The run took 178 s for both tasks and ended in SUCCESS. The second task asked the 18 evaluation
+questions with `databricks-meta-llama-3-3-70b-instruct` choosing the tool, one call per question,
+2.5 s apart. It signed in as the job's own identity; no token was stored or passed to it.
+
+- 18 of 18 answers as expected. The model routed 11; the keyword router handled the other 7.
+  For the 2 questions that name no zone the model picked one, the guard rejected it, and the agent
+  asked which zone was meant. The other 5 (4 out of scope, 1 impossible window) the model declined.
+- Checked from outside the job, on the two answer files downloaded from the volume: all 18 answers
+  of the model-router task are identical, in text, facts, times and source, to those of the keyword
+  task in the same run.
+- The run added exactly 36 traces (32 before, 68 after), all with state OK. The 18 from the second
+  task each hold one model-call span of type `CHAT_MODEL` inside the agent span, and the 11 routed
+  by the model also hold a tool span.
+
+Not covered: the other three hosted models inside Databricks (run from a laptop only), and live
+data.
 
 ### Still unverified after these runs
 

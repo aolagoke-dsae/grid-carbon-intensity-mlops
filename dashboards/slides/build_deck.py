@@ -1452,13 +1452,13 @@ def b09():
         "same way. Third, published day-ahead schedules and prices as features, which the snapshot does not carry. Fourth, alerts "
         "wired to the monitoring table. Fifth, the question-answering agent. It is built and tested: a language model only chooses "
         "which tested tool to call, and every number in an answer comes from that tool. It runs on Databricks against the "
-        "forecast tables with keyword routing. What remains is the language-model router there, and live data."))
+        "forecast tables, with a hosted language model choosing the tool and each call traced. What remains is live data."))
     table(s, 0.5, 2.0, 12.33, [0.6, 3.2, 5.2, 3.3], ["", "Gap", "What it would take", "Why it comes in this order"], [
         ["1", "Retraining schedule", "Retrain monthly on a rolling window; the gate already decides promotion", "Monitoring shows skill fading towards winter"],
         ["2", "Live ingestion", "Scheduled API pulls, each response hashed as upstream does", "Removes the fixed end date of 31 December 2025"],
         ["3", "Forward-looking features", "Day-ahead generation schedules, load forecasts and prices", "The likeliest source of better day-ahead skill, especially in FR"],
         ["4", "Alerting", "Rules on the monitoring table: runs of weeks outside the band", "The numbers exist; nobody is told yet"],
-        ["5", "Question-answering agent in service", "Runs on Databricks against the forecast tables with keyword routing; add the language-model router there, with the model call traced", "Useful only once the tables are live"],
+        ["5", "Question-answering agent in service", "Runs on Databricks with a language model choosing the tool, each call traced; point it at live forecast tables", "Useful only once the tables are live"],
     ], name="Production gaps", size=12, row_h=0.68)
     back_link(s)
 
