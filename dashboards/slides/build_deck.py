@@ -1136,7 +1136,7 @@ def s_skills():
          "docs/ANALYSIS_PLAN_H1_H3.md"],
         ["Data engineering", "Lineage pinned by hash from the ENTSO-E API through dbt and DuckDB to Delta tables",
          "ingestion, upstream repository"],
-        ["MLOps", "Two Databricks jobs, a model registry with a promotion gate, weekly recalibration, monitoring",
+        ["MLOps", "Three Databricks jobs, a model registry with a promotion gate, weekly recalibration, monitoring",
          "databricks.yml, jobs.py"],
         ["Testing", f"{m['tests']} automated tests; {m['breakages']} deliberate breakages, all caught; checks on every push",
          "tests, scripts/mutation_audit.py"],
@@ -1214,7 +1214,9 @@ BACKUP_Q: list[tuple[str, str]] = []  # (question, slide function name), filled 
 def back_link(s):
     if any(sh.name == "Link to backup index" for sh in s.shapes) or not IN_APPENDIX:
         return
-    b = text(s, 10.3, 6.6, 2.53, 0.28, "‹ Backup index", size=11, color="pri", align="r", name="Link to backup index")
+    # On the footer line, between the source text and the slide number. Higher up it sat on
+    # top of the bottom row of cards on four slides.
+    b = text(s, 10.75, 6.92, 1.35, 0.26, "‹ Backup index", size=11, color="pri", align="r", name="Link to backup index")
     link([b], NUM["b00"])
 
 
