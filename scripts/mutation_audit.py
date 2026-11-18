@@ -46,6 +46,7 @@ WINDOWS = "src/carbon_mlops/analysis/windows.py"
 EXTRACTS = "src/carbon_mlops/inference/dashboard_extracts.py"
 AGENT_TOOLS = "src/carbon_mlops/agent/tools.py"
 AGENT = "src/carbon_mlops/agent/qa_agent.py"
+SLIDE_DATA = "dashboards/slides/export_deck_data.py"
 
 COPIED_PATHS: tuple[str, ...] = (
     "src",
@@ -746,6 +747,20 @@ MUTATIONS: tuple[Mutation, ...] = (
         AGENT,
         'if stated is not None and route.args.get("window_hours", stated) != stated:',
         "if False:",
+    ),
+    Mutation(
+        "S2",
+        "the slide-data check ignores a changed result table",
+        SLIDE_DATA,
+        "if now.get(path) != then.get(path)",
+        "if False",
+    ),
+    Mutation(
+        "S2",
+        "the slide-data check ignores changed counts and quoted figures",
+        SLIDE_DATA,
+        "for what, old, new in checks if old != new",
+        "for what, old, new in checks if False",
     ),
 )
 

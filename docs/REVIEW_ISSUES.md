@@ -440,6 +440,24 @@ one. A model router that picks the wrong valid tool gives a grounded answer to t
 the grounding check cannot catch that. The Q7 guards cover the zone and a window length written in
 digits; a length written in words ("two hours") is still the model's to read.
 
+## Slide data (added 2026-11-18)
+
+The numbers behind the presentation's charts, and the code that draws them, are tracked in
+`dashboards/slides/` so that anyone can check or redraw them. The PowerPoint files stay untracked.
+
+| ID | Item | Where | Status |
+| :--- | :--- | :--- | :--- |
+| S1 | Every charted number is computed by `export_deck_data.py` from the result tables in `dashboards/data/`, the committed snapshot and this register, and stored in `deck_data.json`. Figures that were typed into slide text are looked up from the same file | `dashboards/slides/` | verified locally (pending CI): the restructured export gives a file identical to the one the decks were built from |
+| S2 | Staleness check: `deck_data.json` records a SHA-256 of each input file; a test compares them with the current files and re-reads the counts and quoted figures, and names what changed | `tests/test_slides_data.py` | verified locally (pending CI) |
+| S3 | The `dashboards` task refreshes the slide data after rewriting the result tables; `slides-data` and `slides` tasks refresh it and rebuild the decks | `Makefile`, `scripts/dev.ps1` | verified locally (pending CI) |
+| S4 | Limit: the check compares inputs, it does not recompute. A change to package code that leaves every input file unchanged is not flagged by it | | accepted; the package's tests cover that code |
+| S5 | Limit: adding a test or a register item makes the slide data stale by design, so the export has to be re-run before such a commit passes | | accepted |
+
+Verification (2026-11-18): lint clean; 126 tests in about 14.4 s, 4 of them new; breakage audit 94 of
+94 caught, including 2 new cases that switch off each half of the staleness check. The recorded
+fingerprints equal those of the files as Git stores them, so the check gives the same answer on a
+Windows checkout and in CI.
+
 ## Dependencies
 
 - B before D: fixing lags and partial hours changes the training data.

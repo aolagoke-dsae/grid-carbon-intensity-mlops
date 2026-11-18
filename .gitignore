@@ -24,7 +24,8 @@ _repo_review_bundle.txt
 # Local backup of the original history (see docs/HISTORY_REWRITE.md); never pushed
 backups/
 
-# Local presentation and dashboard design pack (decks, layouts, per-visual tables, profile photo)
+# Local presentation and dashboard design pack (decks, layouts, per-visual tables, profile photo).
+# The chart code and the numbers behind the slides are tracked in dashboards/slides/.
 dashboards/design/
 
 # Local MLflow tracking store (created when the QA agent is run with tracing on)

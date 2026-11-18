@@ -26,6 +26,10 @@ dev = [
 agent = [
     "openai>=1.45.0",
 ]
+slides = [
+    "python-pptx>=1.0.0",
+    "segno>=1.6.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/carbon_mlops"]
@@ -41,6 +45,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# The slide scripts hold slide wording and chart definitions as long literal lines.
+"dashboards/slides/*.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

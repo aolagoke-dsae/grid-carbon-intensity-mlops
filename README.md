@@ -171,6 +171,7 @@ pip install -e ".[dev]"
 | Write the dashboard extracts | `.\scripts\dev.ps1 dashboards` | `make dashboards` |
 | Run the breakage audit (several minutes) | `.\scripts\dev.ps1 audit` | `make audit` |
 | Ask the QA agent a question | `python -m carbon_mlops.agent.qa_agent "..."` | the same |
+| Recompute the numbers behind the presentation's charts | `.\scripts\dev.ps1 slides-data` | `make slides-data` |
 
 The local pipeline ingests the snapshot, builds features, trains, evaluates on Gate-Val and writes
 `dashboards/data/latest_24h_forecasts.csv` and `docs/images/cqr_24h_fan_chart.png`. It takes about
@@ -215,6 +216,7 @@ on purpose: the snapshot is static, so a recurring run would rescore the same ho
 | `scripts/` | Task runner, snapshot export, breakage audit, results-document generator |
 | `data/bronze_snapshot/` | The pinned hourly snapshot and its documentation |
 | `dashboards/data/` | Forecast extract, calibration table, hypothesis results, run record |
+| `dashboards/slides/` | The numbers behind the presentation's charts and the code that draws them ([notes](dashboards/slides/README.md)) |
 | `docs/` | Concept note, plans, results, the review register |
 
 ## Monitoring

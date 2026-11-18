@@ -65,7 +65,7 @@ def test_readme_links_and_commands_point_at_things_that_exist() -> None:
 
     runner = (REPO_ROOT / "scripts/dev.ps1").read_text(encoding="utf-8")
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    for task in ("test", "run-local", "audit", "monitor", "dashboards"):
+    for task in ("test", "run-local", "audit", "monitor", "dashboards", "slides-data", "slides"):
         assert f'"{task}"' in runner, task
         assert f"{task}:" in makefile, task
 
