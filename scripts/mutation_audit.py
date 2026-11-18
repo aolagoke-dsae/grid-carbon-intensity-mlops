@@ -763,6 +763,20 @@ MUTATIONS: tuple[Mutation, ...] = (
         "    if False:",
     ),
     Mutation(
+        "Q11",
+        "the model task passes although one of its models failed",
+        JOBS,
+        "    if errors:",
+        "    if False:",
+    ),
+    Mutation(
+        "Q11",
+        "two router models write to the same answers file",
+        JOBS,
+        "    if model in (None, qa_agent.DEFAULT_DATABRICKS_MODEL):",
+        "    if True:",
+    ),
+    Mutation(
         "Q10",
         "the model-router check never hands the questions to the model",
         AGENT,

@@ -14,8 +14,10 @@ Task order on Databricks:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -186,6 +188,16 @@ AGENT_LLM_ANSWERS_FILE = "qa_agent_answers_llm.json"
 ROUTER_PAUSE_S = 2.5  # hosted models are rate-limited; unpaced calls were refused with HTTP 429
 
 
+def agent_answers_file(router: str, model: str | None) -> str:
+    """The answers file for a check: one per router, and one per model other than the default."""
+    if router != "llm":
+        return AGENT_ANSWERS_FILE
+    if model in (None, qa_agent.DEFAULT_DATABRICKS_MODEL):
+        return AGENT_LLM_ANSWERS_FILE
+    stem = Path(AGENT_LLM_ANSWERS_FILE).stem
+    return f"{stem}_{re.sub(r'[^A-Za-z0-9._-]', '_', model)}.json"
+
+
 def run_agent_check_job(
     cfg: CarbonMLOpsConfig | None = None,
     out_dir: str | Path | None = None,
@@ -210,7 +222,8 @@ def run_agent_check_job(
         if is_databricks_runtime():
             cfg = replace(cfg, llm_backend="databricks")
         mlflow.openai.autolog()
-        client, model = qa_agent.make_client(cfg)
+        client, configured_model = qa_agent.make_client(cfg)
+        model = model or configured_model
     records = qa_agent.evaluate(cfg, router=router, client=client, model=model, pause_s=pause_s)
     # Traces are sent in the background. Without this the task can end first: the first
     # workspace run kept only 14 of its 18 traces.
@@ -224,14 +237,16 @@ def run_agent_check_job(
             out_dir = f"/Volumes/{cfg.catalog}/{cfg.schema}/{EXPORT_VOLUME}"
         else:
             out_dir = cfg.local_data_dir
-    path = Path(out_dir) / (AGENT_LLM_ANSWERS_FILE if router == "llm" else AGENT_ANSWERS_FILE)
+    path = Path(out_dir) / agent_answers_file(router, model)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(records, indent=1, default=str), encoding="utf-8")
     failed = [record["id"] for record in records if not record["ok"]]
     by_model = sum(record["router_used"] == "llm" for record in records)
     logger.info(
-        "QA agent (%s router): %d of %d answers as expected, %d routed by the model; written to %s",
+        "QA agent (%s router, model %s): %d of %d answers as expected, %d routed by the model; "
+        "written to %s",
         router,
+        model if router == "llm" else "none",
         len(records) - len(failed),
         len(records),
         by_model,
@@ -286,8 +301,19 @@ def agent_check_main() -> None:
 
 
 def agent_check_llm_main() -> None:
+    """Check the agent with the configured router model, or with each model after `--models`."""
     _configure_logging()
-    run_agent_check_job(router="llm")
+    parser = argparse.ArgumentParser(description="Check the QA agent with a model router.")
+    parser.add_argument("--models", nargs="*", default=[], help="serving endpoints to try in turn")
+    models: list[str | None] = list(parser.parse_known_args()[0].models) or [None]
+    errors = []
+    for model in models:
+        try:
+            run_agent_check_job(router="llm", model=model)
+        except RuntimeError as exc:  # try the remaining models before failing the task
+            errors.append(f"{model}: {exc}")
+    if errors:
+        raise RuntimeError("; ".join(errors))
 
 
 def score_main() -> None:

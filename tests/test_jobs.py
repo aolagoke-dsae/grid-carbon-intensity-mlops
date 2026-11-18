@@ -270,7 +270,11 @@ def test_agent_check_with_a_model_router_fails_when_the_model_routes_nothing(
     mlflow.tracing.disable()
     monkeypatch.setattr(jobs.mlflow, "flush_trace_async_logging", lambda: None)
     monkeypatch.chdir(Path(__file__).resolve().parents[1])
-    run = {"out_dir": tmp_path, "router": "llm", "model": "fake", "pause_s": 0}
+    default_model = qa_agent.DEFAULT_DATABRICKS_MODEL
+    run = {"out_dir": tmp_path, "router": "llm", "model": default_model, "pause_s": 0}
+    # Each model other than the default keeps its own answers file.
+    assert jobs.agent_answers_file("llm", "other/model") == "qa_agent_answers_llm_other_model.json"
+    assert jobs.agent_answers_file("keyword", "other/model") == jobs.AGENT_ANSWERS_FILE
 
     path = Path(jobs.run_agent_check_job(client=client(fail=False), **run))
     records = json.loads(path.read_text(encoding="utf-8"))
@@ -284,3 +288,32 @@ def test_agent_check_with_a_model_router_fails_when_the_model_routes_nothing(
         jobs.run_agent_check_job(client=client(fail=True), **run)
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert all(r["ok"] and r["router_used"] != "llm" for r in saved)
+
+
+def test_the_model_task_tries_every_model_and_fails_if_one_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    from carbon_mlops import jobs
+
+    tried: list[str | None] = []
+
+    def fake_run(router: str, model: str | None) -> str:
+        assert router == "llm"
+        tried.append(model)
+        if model == "b":
+            raise RuntimeError("answers not as expected")
+        return "saved"
+
+    monkeypatch.setattr(jobs, "run_agent_check_job", fake_run)
+    monkeypatch.setattr(sys, "argv", ["carbon-agent-check-llm", "--models", "a", "b", "c"])
+    with pytest.raises(RuntimeError, match="^b: answers not as expected$"):
+        jobs.agent_check_llm_main()
+    assert tried == ["a", "b", "c"], "a failing model must not stop the ones after it"
+
+    # With no list, the configured model is used.
+    tried.clear()
+    monkeypatch.setattr(sys, "argv", ["carbon-agent-check-llm"])
+    jobs.agent_check_llm_main()
+    assert tried == [None]
