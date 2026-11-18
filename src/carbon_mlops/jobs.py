@@ -17,6 +17,7 @@ import json
 import logging
 from pathlib import Path
 
+import mlflow
 import pandas as pd
 from mlflow.tracking import MlflowClient
 
@@ -190,6 +191,9 @@ def run_agent_check_job(
     cfg = cfg or CarbonMLOpsConfig()
     ensure_mlflow_experiment()
     records = qa_agent.evaluate(cfg)
+    # Traces are sent in the background. Without this the task can end first: the first
+    # workspace run kept only 14 of its 18 traces.
+    mlflow.flush_trace_async_logging()
     if out_dir is None:
         if is_databricks_runtime():
             from pyspark.sql import SparkSession

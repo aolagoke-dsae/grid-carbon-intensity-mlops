@@ -213,8 +213,11 @@ def test_agent_check_job_saves_every_answer_and_fails_on_a_wrong_one(
     from carbon_mlops.agent import qa_agent
 
     mlflow.tracing.disable()
+    flushed: list[bool] = []
+    monkeypatch.setattr(jobs.mlflow, "flush_trace_async_logging", lambda: flushed.append(True))
     monkeypatch.chdir(Path(__file__).resolve().parents[1])
     path = Path(jobs.run_agent_check_job(out_dir=tmp_path))
+    assert flushed == [True], "traces must be sent before the task ends"
     records = json.loads(path.read_text(encoding="utf-8"))
     assert path.name == jobs.AGENT_ANSWERS_FILE and len(records) == 18
     assert all(record["ok"] for record in records)
