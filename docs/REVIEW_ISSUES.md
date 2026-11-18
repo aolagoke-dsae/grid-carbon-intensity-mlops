@@ -196,17 +196,17 @@ not yet wired into a Databricks job (G3).
 
 | ID | Issue | Where | Status |
 | :--- | :--- | :--- | :--- |
-| F1 | `02_cqr_calibration_analysis.py` and `hypothesis_results.csv` do not exist | `notebooks/`, `dashboards/data/` | verified (pending CI): notebook, results CSV, calibration CSV and run record are committed |
-| F2 | Reported coverage does not reproduce (see reference numbers) | notebook, README | verified (pending CI): old figures retired; reproducible figures in `docs/LOCKED_TEST_RESULTS.md` |
-| F3 | No confidence intervals on coverage | notebook | verified (pending CI): 7-day block-bootstrap intervals on every coverage figure |
-| F4 | H1 width result is a level artifact; needs relative width and conditional coverage | notebook | verified (pending CI): relative width, error and coverage by regime reported as context |
-| F5 | H1 pseudo-replication: each target hour appears 24 times | notebook | verified (pending CI): each target hour counted once |
-| F6 | H2 was decided before testing (0 of 17,539 hours have DE-LU below FR) and the window has no summer; label it descriptive | notebook, `CONCEPT_NOTE.md` | verified (pending CI): reported as descriptive, with both scope limits |
-| F7 | H3 p-value is an n-floor; zones likely pooled as independent | notebook | verified (pending CI): zones tested separately; pooled figure shown with its caveat |
-| F8 | H3 width is partly built from calibration offsets; test realized error instead | notebook | verified (pending CI): corrected test uses realized absolute error |
-| F9 | H3 uses only 00:00 origins, confounding lead time with time of day | notebook | verified (pending CI): corrected test averages over all 24 origin hours |
-| F10 | H3 permutation importance: no per-bucket models exist, and features correlate at 0.99 | notebook | verified (pending CI): grouped permutation importance with bootstrap intervals |
-| F11 | Locked test has been evaluated more than once; disclose it | README, `CONCEPT_NOTE.md` | verified (pending CI): disclosed in the plan, the concept note and the results document; root `README.md` written, with tests tying its numbers and links to the committed files |
+| F1 | `02_cqr_calibration_analysis.py` and `hypothesis_results.csv` do not exist | `notebooks/`, `dashboards/data/` | done (verified, CI green): notebook, results CSV, calibration CSV and run record are committed |
+| F2 | Reported coverage does not reproduce (see reference numbers) | notebook, README | done (verified, CI green): old figures retired; reproducible figures in `docs/LOCKED_TEST_RESULTS.md` |
+| F3 | No confidence intervals on coverage | notebook | done (verified, CI green): 7-day block-bootstrap intervals on every coverage figure |
+| F4 | H1 width result is a level artifact; needs relative width and conditional coverage | notebook | done (verified, CI green): relative width, error and coverage by regime reported as context |
+| F5 | H1 pseudo-replication: each target hour appears 24 times | notebook | done (verified, CI green): each target hour counted once |
+| F6 | H2 was decided before testing (0 of 17,539 hours have DE-LU below FR) and the window has no summer; label it descriptive | notebook, `CONCEPT_NOTE.md` | done (verified, CI green): reported as descriptive, with both scope limits |
+| F7 | H3 p-value is an n-floor; zones likely pooled as independent | notebook | done (verified, CI green): zones tested separately; pooled figure shown with its caveat |
+| F8 | H3 width is partly built from calibration offsets; test realized error instead | notebook | done (verified, CI green): corrected test uses realized absolute error |
+| F9 | H3 uses only 00:00 origins, confounding lead time with time of day | notebook | done (verified, CI green): corrected test averages over all 24 origin hours |
+| F10 | H3 permutation importance: no per-bucket models exist, and features correlate at 0.99 | notebook | done (verified, CI green): grouped permutation importance with bootstrap intervals |
+| F11 | Locked test has been evaluated more than once; disclose it | README, `CONCEPT_NOTE.md` | done (verified, CI green): disclosed in the plan, the concept note and the results document; root `README.md` written, with tests tying its numbers and links to the committed files |
 
 Phase F outcome (2026-11-15). The Locked Test was scored once with the frozen model, under the plan.
 
@@ -285,7 +285,8 @@ of `docs/DATABRICKS_VERIFICATION.md` pass; training run `293770853415496`, infer
 `807621109176368`. Step 12 passes as run `617140816488603`, and a second inference run (`424886171434319`) left the
 registry in its operating state: champion is version 4, recalibrated through 2025-12-31.
 Not yet `done`: the model-version tags are unconfirmed, G16 (small cross-platform numerical
-difference) is open, and CI has not been confirmed on these commits.
+difference) is open. CI is green on the current head, which contains these commits (confirmed
+2026-11-18).
 
 What changed:
 
@@ -323,8 +324,8 @@ New work, not part of the original review. Status follows the same three-state r
 
 | ID | Item | Where | Status |
 | :--- | :--- | :--- | :--- |
-| M1 | Feature drift: PSI per zone and feature, trailing 30 days against Train and against the same 30 days a year earlier | `monitoring/compute_drift.py` | verified locally (pending CI) |
-| M2 | Rolling 7-day coverage per zone and horizon bucket, miss direction, width, skill against persistence | `monitoring/compute_drift.py` | verified locally (pending CI) |
+| M1 | Feature drift: PSI per zone and feature, trailing 30 days against Train and against the same 30 days a year earlier | `monitoring/compute_drift.py` | done (verified locally, CI green) |
+| M2 | Rolling 7-day coverage per zone and horizon bucket, miss direction, width, skill against persistence | `monitoring/compute_drift.py` | done (verified locally, CI green) |
 | M3 | Monitoring task in the Databricks inference job (`carbon-monitor`) | `jobs.py`, `databricks.yml` | verified on the workspace 2026-11-17 (run `963815134813799`); see `docs/DATABRICKS_VERIFICATION.md` |
 | M4 | PSI against the whole Train period is high almost always (321 of 468 values at alert), because a 30-day window against 14 months mostly measures the season | design | addressed by adding the same-season reference; the original measure is kept because the sprint plan specifies it |
 | M5 | Same-season PSI is still at alert in 249 of 468 values. The 0.10 / 0.25 thresholds assume independent samples; a month of hourly data is strongly autocorrelated | design | open limitation, documented in the README; thresholds deliberately not retuned |
@@ -353,8 +354,8 @@ visuals. The dashboards themselves are built by the author; this section covers 
 
 | ID | Item | Where | Status |
 | :--- | :--- | :--- | :--- |
-| W1 | Window ranking (window means, cleanest start, hindsight rank), shared by the extracts and the future QA agent | `analysis/windows.py` | verified locally (pending CI) |
-| W2 | Forecast history, candidate windows per strategy, and strategy summary | `inference/dashboard_extracts.py` | verified locally (pending CI) |
+| W1 | Window ranking (window means, cleanest start, hindsight rank), shared by the extracts and the QA agent | `analysis/windows.py` | done (verified locally, CI green) |
+| W2 | Forecast history, candidate windows per strategy, and strategy summary | `inference/dashboard_extracts.py` | done (verified locally, CI green) |
 | W3 | Extract task in the Databricks inference job (`carbon-extracts`) | `jobs.py`, `databricks.yml` | verified on the workspace 2026-11-17 (run `963815134813799`); see `docs/DATABRICKS_VERIFICATION.md` |
 | W4 | Per-visual build notes, colours, source line and refresh steps | `dashboards/README.md` | written; revised 2026-11-17 to the current design (business-value visuals, a load control, plain wording, and "upper bound" as the displayed name of the `cautious` strategy); the dashboards do not exist yet |
 | W5 | CSV files written on the workspace carry no UTC offset and write midnight as a date only; the local files carry `+00:00`. Same instants, different text | `inference/dashboard_extracts.py`, `monitoring/compute_drift.py` | fixed 2026-11-17 and verified locally: all four CSV extracts (including `latest_24h_forecasts.csv`, which had the same defect) go through `write_csv_extract` in `io/store.py`, which writes UTC text with `+00:00` whatever the input; 2 tests, 3 breakage cases (77 of 77 caught), and the regenerated local files are byte-identical. Confirmed on the workspace 2026-11-17 (run `448998131378416`): every timestamp in the five downloaded files carries `+00:00`, and the timestamp columns of three files equal the local ones as text |
@@ -399,13 +400,13 @@ it contains a number that is not one of the tool's facts.
 
 | ID | Item | Where | Status |
 | :--- | :--- | :--- | :--- |
-| Q1 | Three deterministic tools, each traced with `mlflow.trace`: cleanest window, grid comparison, model health. They read the Gold tables on Databricks and their committed snapshots locally, and share the window ranking with the dashboard extracts | `agent/tools.py` | verified locally (pending CI) |
-| Q2 | Keyword router, answer templates, and refusals that contain no figures (out of scope, zone not named, request the tools cannot serve) | `agent/qa_agent.py` | verified locally (pending CI) |
-| Q3 | Grounding check: every number in a finished answer must equal a tool fact at the precision written; otherwise the answer is withheld | `agent/qa_agent.py` | verified locally (pending CI) |
+| Q1 | Three deterministic tools, each traced with `mlflow.trace`: cleanest window, grid comparison, model health. They read the Gold tables on Databricks and their committed snapshots locally, and share the window ranking with the dashboard extracts | `agent/tools.py` | partly done: the tools and the local snapshot branch are verified locally and CI is green. **The Gold-table branch used on Databricks has never been run** (see Q5) |
+| Q2 | Keyword router, answer templates, and refusals that contain no figures (out of scope, zone not named, request the tools cannot serve) | `agent/qa_agent.py` | done (verified locally, CI green) |
+| Q3 | Grounding check: every number in a finished answer must equal a tool fact at the precision written; otherwise the answer is withheld | `agent/qa_agent.py` | done (verified locally, CI green) |
 | Q4 | Model router: a chat model may return only a tool name and arguments, validated against a fixed schema; its prose is discarded; any invalid reply or backend failure falls back to the keyword router | `agent/qa_agent.py` | run against four Databricks hosted models on 2026-11-18 (see Q7 and the table below); not run against Ollama |
 | Q5 | MLflow traces of a real question | | checked locally 2026-11-18: one question from the command line produced one trace with an agent span (`qa_agent.answer`) containing a tool span (`check_model_health`). Tracing is switched off in the tests. Verified on the workspace 2026-11-18: three questions run from a laptop were logged to the experiment `carbon-qa-agent-traces` (id 3346646492912694) and read back with independent code. Each trace has state OK and an agent span holding the question and the answer text, identical to the answer returned locally; the two answered questions each have a child tool span with the tool's arguments and its 10 facts; the question with no zone has no tool span and the clarifying reply. The stored traces contain no credential (searched for the access token). **Not covered:** the model call is not a span, so a trace does not show the model's raw reply (Q6); and the tools read the committed snapshots, because the agent has not been run inside Databricks |
 | Q6 | `mlflow.openai.autolog()` for the model router, named in the sprint plan | | not implemented |
-| Q7 | Found by the first live run: with no zone in the question, all four models chose DE-LU instead of leaving the agent to ask; and asked for a 30-hour window, one model answered for 24 instead of letting the agent refuse. Fix: a model route is rejected if its zone is not the one the question names, or if its window length differs from one the question states in digits; the keyword router then asks or refuses in fixed words. The stand-in tests had not caught either, because the stand-in only replied what the test told it to | `agent/qa_agent.py` (`llm_route`) | fixed; verified locally and on the four models (pending CI) |
+| Q7 | Found by the first live run: with no zone in the question, all four models chose DE-LU instead of leaving the agent to ask; and asked for a 30-hour window, one model answered for 24 instead of letting the agent refuse. Fix: a model route is rejected if its zone is not the one the question names, or if its window length differs from one the question states in digits; the keyword router then asks or refuses in fixed words. The stand-in tests had not caught either, because the stand-in only replied what the test told it to | `agent/qa_agent.py` (`llm_route`) | done: fixed, verified locally and on the four models, CI green |
 
 Verification (2026-11-18): 38 tests, including hand-computed tool results, an independent
 recomputation on the committed snapshots, 18 evaluation questions (`agent/eval_questions.json`), and
@@ -447,9 +448,9 @@ The numbers behind the presentation's charts, and the code that draws them, are 
 
 | ID | Item | Where | Status |
 | :--- | :--- | :--- | :--- |
-| S1 | Every charted number is computed by `export_deck_data.py` from the result tables in `dashboards/data/`, the committed snapshot and this register, and stored in `deck_data.json`. Figures that were typed into slide text are looked up from the same file | `dashboards/slides/` | verified locally (pending CI): the restructured export gives a file identical to the one the decks were built from |
-| S2 | Staleness check: `deck_data.json` records a SHA-256 of each input file; a test compares them with the current files and re-reads the counts and quoted figures, and names what changed | `tests/test_slides_data.py` | verified locally (pending CI) |
-| S3 | The `dashboards` task refreshes the slide data after rewriting the result tables; `slides-data` and `slides` tasks refresh it and rebuild the decks | `Makefile`, `scripts/dev.ps1` | verified locally (pending CI) |
+| S1 | Every charted number is computed by `export_deck_data.py` from the result tables in `dashboards/data/`, the committed snapshot and this register, and stored in `deck_data.json`. Figures that were typed into slide text are looked up from the same file | `dashboards/slides/` | done for the charts (verified locally, CI green): every chart series comes from `deck_data.json`, and the restructured export gives a file identical to the one the decks were built from. Still typed by hand: the champion version and the number of recalibration runs (in the export), and in slide text the test run time ("about 13 seconds") and the lead-time bands where FR coverage holds |
+| S2 | Staleness check: `deck_data.json` records a SHA-256 of each input file; a test compares them with the current files and re-reads the counts and quoted figures, and names what changed | `tests/test_slides_data.py` | done (verified locally, CI green) |
+| S3 | The `dashboards` task refreshes the slide data after rewriting the result tables; `slides-data` and `slides` tasks refresh it and rebuild the decks | `Makefile`, `scripts/dev.ps1` | partly verified: `dev.ps1 slides-data` and `dev.ps1 dashboards` were run on Windows 2026-11-18, and the `dashboards` run rewrote the result tables and the slide data byte for byte. **Not run:** the `slides` task as one command (it needs one environment holding both the package and the `slides` extra; the decks were built in a separate one), and the three new `make` targets (no `make` on the Windows machine; CI runs only `make test`) |
 | S4 | Limit: the check compares inputs, it does not recompute. A change to package code that leaves every input file unchanged is not flagged by it | | accepted; the package's tests cover that code |
 | S5 | Limit: adding a test or a register item makes the slide data stale by design, so the export has to be re-run before such a commit passes | | accepted |
 
