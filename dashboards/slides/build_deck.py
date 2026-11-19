@@ -128,6 +128,25 @@ def fill_paragraphs(tf, paras, size, bold, color, align="l", spacing=None):
             run.font.size = Pt(opt.get("size", size))
             run.font.bold = opt.get("bold", bold)
             colour(run.font.color, opt.get("color", color))
+            if opt.get("url"):
+                web_link(run, opt["url"])
+
+
+HLINK_COLOUR_EXT = "{A12FA001-AC4F-418D-AE19-62706E023703}"
+HLINK_COLOUR_NS = "http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor"
+
+
+def web_link(run, url: str) -> None:
+    """Make a run of text a link to `url` that keeps the colour of the text around it.
+
+    Without the extension PowerPoint repaints a text link in the theme's hyperlink colour, which
+    is unreadable on the dark slides.
+    """
+    run.hyperlink.address = url
+    click = run._r.find(qn("a:rPr")).find(qn("a:hlinkClick"))
+    ext = etree.SubElement(etree.SubElement(click, qn("a:extLst")), qn("a:ext"))
+    ext.set("uri", HLINK_COLOUR_EXT)
+    etree.SubElement(ext, f"{{{HLINK_COLOUR_NS}}}hlinkClr", nsmap={"ahyp": HLINK_COLOUR_NS}).set("val", "tx")
 
 
 def shape(slide, kind, x, y, w, h, fill="bg2", line=None, name=None, line_width=1.25):
@@ -398,6 +417,11 @@ def pct(v: float, d: int = 0) -> str:
 
 
 # ================================================================ title page
+# The printed addresses are links; each is written once here so text and target cannot differ.
+REPO_TEXT = "github.com/aolagoke-dsae/grid-carbon-intensity-mlops"
+UPSTREAM_TEXT = "github.com/aolagoke-dsae/grid-carbon-intensity"
+REPO_URL, UPSTREAM_URL = f"https://{REPO_TEXT}", f"https://{UPSTREAM_TEXT}"
+
 # The title as registered for the talk. The slide and the file's properties both use it.
 TALK_TITLE = "When is electricity clean, and does shifting load pay off in CO₂?"
 
@@ -417,7 +441,7 @@ def s00():
     text(s, 0.5, 5.55, 6.3, 1.2, [
         [("Dr. Adewole Olagoke", {"bold": True, "color": "bg1", "size": 16})],
         "Project walkthrough" if INTERVIEW else "11 December 2026",
-        "github.com/aolagoke-dsae/grid-carbon-intensity-mlops",
+        [(REPO_TEXT, {"url": REPO_URL})],
     ], size=13, color="bg2", spacing=3, name="Author, date and repository")
     chart = line_chart(s, 7.3, 1.6, 5.53, 4.3, f["hours"], [
         ("Upper bound (95%)", f["p95"], "bg2", 1.0, False),
@@ -830,7 +854,7 @@ def s10():
         text(s, bx + 0.22, y0 + 1.95, w - 0.44, 1.5, body, size=14, name=f"Answer {i + 1} detail")
     text(s, 0.5, 5.55, 12.33, 0.9, [
         [("Next  ", {"bold": True, "color": "bg1"}), ("a retraining schedule · the two dashboards · live data for the question-answering agent", {})],
-        [("Code  ", {"bold": True, "color": "bg1"}), ("github.com/aolagoke-dsae/grid-carbon-intensity-mlops · upstream: github.com/aolagoke-dsae/grid-carbon-intensity", {})],
+        [("Code  ", {"bold": True, "color": "bg1"}), (REPO_TEXT, {"url": REPO_URL}), (" · upstream: ", {}), (UPSTREAM_TEXT, {"url": UPSTREAM_URL})],
         [(SOURCE, {"size": 10})],
     ], size=13, color="bg2", spacing=5, name="Next steps and source")
 
@@ -862,12 +886,13 @@ def s11():
     link([more], NUM["b00"])
     text(s, 0.5, 6.1, 12.33, 1.0, [
         [("Dr. Adewole Olagoke", {"bold": True, "color": "bg1", "size": 15})],
-        "github.com/aolagoke-dsae/grid-carbon-intensity-mlops  \u00b7  upstream data: github.com/aolagoke-dsae/grid-carbon-intensity",
+        [(REPO_TEXT, {"url": REPO_URL}), ("  \u00b7  upstream data: ", {}), (UPSTREAM_TEXT, {"url": UPSTREAM_URL})],
         [(SOURCE, {"size": 10})],
     ], size=13, color="bg2", spacing=4, name="Contact and source")
 
 
 PROFILE_URL = "https://github.com/aolagoke-dsae"
+LINKEDIN_URL = "https://www.linkedin.com/in/adewole-olagoke"
 
 
 # ================================================================ template: about me
@@ -911,7 +936,10 @@ def s_about():
         card(s, 3.6, y, 9.23, 1.0, name=f"About card {i + 1}")
         text(s, 3.8, y, 1.7, 1.0, head, size=14, bold=True, color="pri", anchor="middle", name=f"About {i + 1} label")
         text(s, 5.5, y, 7.15, 1.0, body, size=14, anchor="middle", name=f"About {i + 1} text")
-    text(s, 3.6, 6.5, 9.23, 0.3, "github.com/aolagoke-dsae  ·  linkedin.com/in/adewole-olagoke", size=12, color="sec", name="Links")
+    text(s, 3.6, 6.5, 9.23, 0.3, [[
+        ("github.com/aolagoke-dsae", {"url": PROFILE_URL}), ("  ·  ", {}),
+        ("linkedin.com/in/adewole-olagoke", {"url": LINKEDIN_URL}),
+    ]], size=12, color="sec", name="Links")
 
 
 # ================================================================ template: stakeholder
@@ -1039,7 +1067,7 @@ def s_base():
                   question=0, notes=(
         "The baseline is persistence: tomorrow's intensity at each hour equals the intensity now. It is a strong baseline at "
         "short lead times, because intensity changes slowly. The table gives the error of the baseline and of the model on the "
-        "held-out test. The model wins in every zone and every lead-time band. The improvement is largest a few hours ahead. "
+        "held-out test. The model wins in every zone and every lead-time band. The improvement is largest in the first half of the day ahead. "
         "A promotion gate in the pipeline enforces exactly this: a model that does not beat the baseline in every zone and band "
         "cannot become the champion."))
     rows = [[z, band.replace("All lead times", "All, 1–24 hours"), f"{b:.2f}", f"{m:.2f}", f"{imp:.0f}% lower"]
