@@ -471,16 +471,16 @@ Neither changes the model, the data or any result.
 
 | ID | Item | Where | Status |
 | :--- | :--- | :--- | :--- |
-| R1 | DVC records the snapshot as the output of a stage: the command that rebuilds it, and its MD5 and size in `dvc.lock`. The file stays in Git (`cache: false`) and `dvc repro` does not delete it first (`persist: true`), so a clone needs neither a DVC remote nor DVC itself. A test compares `dvc.lock` with the file | `dvc.yaml`, `dvc.lock`, `.dvc/config`, `tests/test_reproducibility.py` | verified locally 2026-11-21 with DVC 3.67.1: `dvc status` reports "up to date"; after one byte was appended to the file it reported the output as modified; the file was restored and its SHA-256 equals the pin. `dvc repro` was not run. Pending CI |
-| R2 | Dockerfile: `python:3.11-slim`, the OpenMP runtime LightGBM needs, the install command of CI, an ordinary user, and `make test` as the default command. A test fails if its Python version or install command differs from the CI workflow | `Dockerfile`, `tests/test_reproducibility.py` | implemented 2026-11-21, not verified: Docker is not installed on the development machine, so the image has never been built. It counts as verified only when the `docker-image` CI job is green |
-| R3 | CI job `docker-image` builds the image and runs the lint and the tests inside it | `.github/workflows/ci_cd.yml` | implemented 2026-11-21; pending the first CI run |
-| R4 | `.dockerignore` keeps the Git history, credentials, local data stores and the unpublished folders (`backups/`, `dashboards/design/`) out of the image | `.dockerignore` | implemented 2026-11-21; a test checks the list, the image content itself was not inspected |
+| R1 | DVC records the snapshot as the output of a stage: the command that rebuilds it, and its MD5 and size in `dvc.lock`. The file stays in Git (`cache: false`) and `dvc repro` does not delete it first (`persist: true`), so a clone needs neither a DVC remote nor DVC itself. A test compares `dvc.lock` with the file | `dvc.yaml`, `dvc.lock`, `.dvc/config`, `tests/test_reproducibility.py` | done 2026-11-21, CI green on `40aec70`; checked locally with DVC 3.67.1: `dvc status` reports "up to date"; after one byte was appended to the file it reported the output as modified; the file was restored and its SHA-256 equals the pin. `dvc repro` was not run |
+| R2 | Dockerfile: `python:3.11-slim`, the OpenMP runtime LightGBM needs, the install command of CI, an ordinary user, and `make test` as the default command. A test fails if its Python version or install command differs from the CI workflow | `Dockerfile`, `tests/test_reproducibility.py` | done 2026-11-21, CI green on `40aec70`: the `docker-image` job built the image and the lint and the tests passed inside it. Docker is not installed on the development machine, so the image was never built or run there, and `make run-local` inside it is untried |
+| R3 | CI job `docker-image` builds the image and runs the lint and the tests inside it | `.github/workflows/ci_cd.yml` | done 2026-11-21: the job's first run, on `40aec70`, was green |
+| R4 | `.dockerignore` keeps the Git history, credentials, local data stores and the unpublished folders (`backups/`, `dashboards/design/`) out of the image | `.dockerignore` | done 2026-11-21, CI green on `40aec70`: a test checks the list; the image content itself was not inspected |
 | R5 | Limit: package versions are bounded in `pyproject.toml`, not locked, so the image is not bit-for-bit repeatable over time. The DVC record uses MD5, which detects change but is not a security check; the SHA-256 pin of gate G1 remains the check ingestion enforces | | accepted |
 
 Verification (2026-11-21): lint clean; 134 tests, 5 of them new; breakage audit 104 of 104 caught,
 including 5 new cases (a wrong hash in `dvc.lock`, the snapshot moved into the DVC cache, a different
 Python version in the image, a CI job that builds but does not test, the backup folder let into the
-image). The image itself has not been built anywhere yet.
+image). CI on `40aec70` (2026-11-21): both jobs green; the image was built and the tests passed inside it.
 
 ## Dependencies
 
