@@ -3,6 +3,10 @@
 - **File:** `entsoe_generation_sample.parquet`
 - **SHA-256 Checksum:** `c3dc7796be7589eb72c5363277057b164493f909f81500f982d4f3160eea34a9`
   (pinned in `src/carbon_mlops/config.py` as `bronze_snapshot_sha256`; ingestion fails on a mismatch)
+- **DVC record:** stage `bronze_snapshot` in the root `dvc.yaml`; `dvc.lock` holds the file's MD5
+  (`efcd01a5a5e32d7f7b9a6e034c2b0073`) and size (4,573,033 bytes). The file stays in Git
+  (`cache: false`), and `dvc status` reports whether it still matches. After a deliberate rebuild run
+  `dvc commit -f bronze_snapshot` and update the SHA-256 above and in the configuration
 - **Source:** ENTSO-E Transparency Platform; data: 50Hertz, Amprion, TenneT, TransnetBW (DE-LU) and
   RTE (FR). Actual generation per production type (A75), used on the owners' terms, which require the
   source to be named (see the root `README.md`). Intensity values are the author's computations

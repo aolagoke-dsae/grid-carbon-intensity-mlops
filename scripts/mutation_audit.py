@@ -47,6 +47,11 @@ EXTRACTS = "src/carbon_mlops/inference/dashboard_extracts.py"
 AGENT_TOOLS = "src/carbon_mlops/agent/tools.py"
 AGENT = "src/carbon_mlops/agent/qa_agent.py"
 SLIDE_DATA = "dashboards/slides/export_deck_data.py"
+DOCKERFILE = "Dockerfile"
+DOCKERIGNORE = ".dockerignore"
+WORKFLOW = ".github/workflows/ci_cd.yml"
+DVC_STAGE = "dvc.yaml"
+DVC_LOCK = "dvc.lock"
 
 COPIED_PATHS: tuple[str, ...] = (
     "src",
@@ -56,6 +61,7 @@ COPIED_PATHS: tuple[str, ...] = (
     "docs",
     "data/bronze_snapshot",
     "dashboards",
+    ".github",
 )
 COPIED_FILES: tuple[str, ...] = (
     "pyproject.toml",
@@ -63,6 +69,10 @@ COPIED_FILES: tuple[str, ...] = (
     "README.md",
     "Makefile",
     "LICENSE",
+    "Dockerfile",
+    ".dockerignore",
+    "dvc.yaml",
+    "dvc.lock",
 )
 
 
@@ -796,6 +806,41 @@ MUTATIONS: tuple[Mutation, ...] = (
         SLIDE_DATA,
         "for what, old, new in checks if old != new",
         "for what, old, new in checks if False",
+    ),
+    Mutation(
+        "R1",
+        "the DVC record holds the hash of a different snapshot",
+        DVC_LOCK,
+        "md5: efcd01a5a5e32d7f7b9a6e034c2b0073",
+        "md5: efcd01a5a5e32d7f7b9a6e034c2b0074",
+    ),
+    Mutation(
+        "R1",
+        "DVC takes the snapshot out of Git and into its cache",
+        DVC_STAGE,
+        "          cache: false",
+        "          cache: true",
+    ),
+    Mutation(
+        "R2",
+        "the image runs a different Python version from CI",
+        DOCKERFILE,
+        "FROM python:3.11-slim",
+        "FROM python:3.12-slim",
+    ),
+    Mutation(
+        "R3",
+        "CI builds the image but never runs the tests inside it",
+        WORKFLOW,
+        "        run: docker run --rm grid-carbon-intensity-mlops",
+        "        run: docker image ls grid-carbon-intensity-mlops",
+    ),
+    Mutation(
+        "R4",
+        "the image takes in the private history backup",
+        DOCKERIGNORE,
+        "backups/\n",
+        "",
     ),
 )
 

@@ -232,6 +232,7 @@ def main() -> None:
     digest = hashlib.sha256(args.output.read_bytes()).hexdigest()
     logger.info("Wrote %s (sha256=%s)", args.output, digest)
     logger.info("Update bronze_snapshot_sha256 in src/carbon_mlops/config.py and the README")
+    logger.info("Then record the new file for DVC: dvc commit -f bronze_snapshot")
 
 
 if __name__ == "__main__":

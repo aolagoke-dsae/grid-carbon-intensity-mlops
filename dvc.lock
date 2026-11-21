@@ -1,0 +1,10 @@
+schema: '2.0'
+stages:
+  bronze_snapshot:
+    cmd: python scripts/export_bronze_snapshot.py --upstream-repo 
+      ../grid-carbon-intensity
+    outs:
+    - path: data/bronze_snapshot/entsoe_generation_sample.parquet
+      hash: md5
+      md5: efcd01a5a5e32d7f7b9a6e034c2b0073
+      size: 4573033

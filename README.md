@@ -8,17 +8,6 @@ It extends the upstream repository `grid-carbon-intensity`, which answers *what 
 intensity of each hour?* This one asks *what will it be over the next 1 to 24 hours, and how sure
 can we be?*
 
-> **Read this first**
->
-> - **Source of the data: ENTSO-E Transparency Platform; data: 50Hertz, Amprion, TenneT, TransnetBW
->   (DE-LU) and RTE (FR).** It is used on the owners' terms, which require the source to be named.
->   See [Data and licence](#data-and-licence).
-> - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
-> - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
-> - **Not finished:** the two dashboards are not built (their data and build notes exist). The QA agent
->   is built, tested and run on Databricks against the Gold tables, with a hosted language model
->   choosing the tool; those tables hold the static snapshot, not live data.
-
 ## Results at a glance
 
 Evaluated once on a held-out period (13 September to 31 December 2025, 124,955 forecasts) under a
@@ -39,6 +28,17 @@ The average hides three weaknesses:
 - **Calibration depends on the regime.** In DE-LU's highest renewable-share quartile coverage is
   83.3%. Those are the greenest hours, where a load-shifting user would act.
 - **FR at one hour ahead does not beat persistence.**
+
+> **Read this before relying on the results**
+>
+> - **Source of the data: ENTSO-E Transparency Platform; data: 50Hertz, Amprion, TenneT, TransnetBW
+>   (DE-LU) and RTE (FR).** It is used on the owners' terms, which require the source to be named.
+>   See [Data and licence](#data-and-licence).
+> - **All three pre-registered hypotheses were falsified.** That is the result, reported as it came out.
+> - **The held-out test set was not kept fully blind.** See [What the results do and do not show](#what-the-results-do-and-do-not-show).
+> - **Not finished:** the two dashboards are not built (their data and build notes exist). The QA agent
+>   is built, tested and run on Databricks against the Gold tables, with a hosted language model
+>   choosing the tool; those tables hold the static snapshot, not live data.
 
 ### Does acting on the forecast help?
 
@@ -185,6 +185,19 @@ python notebooks/02_cqr_calibration_analysis.py --check
 
 Do not use `--run`: the analysis plan allows one execution, and it has been used.
 
+### In a container
+
+The [Dockerfile](Dockerfile) gives the same environment as CI: Python 3.11 and the same install
+command. CI builds the image and runs the lint and the tests inside it on every push.
+
+```bash
+docker build -t grid-carbon-intensity-mlops .
+docker run --rm grid-carbon-intensity-mlops                  # lint and tests
+docker run --rm grid-carbon-intensity-mlops make run-local   # the local pipeline
+```
+
+The Databricks jobs do not use this image. They install the wheel on serverless compute.
+
 ## Databricks
 
 Three Serverless jobs are defined in `databricks.yml` and run from a wheel built from this repository.
@@ -217,6 +230,8 @@ on purpose: the snapshot is static, so a recurring run would rescore the same ho
 | `notebooks/` | Exploratory analysis and the held-out evaluation |
 | `scripts/` | Task runner, snapshot export, breakage audit, results-document generator |
 | `data/bronze_snapshot/` | The pinned hourly snapshot and its documentation |
+| `dvc.yaml`, `dvc.lock` | The DVC record of the snapshot: the command that rebuilds it, its hash and size |
+| `Dockerfile` | The CI environment as a container image |
 | `dashboards/data/` | Forecast extract, calibration table, hypothesis results, run record |
 | `dashboards/slides/` | The numbers behind the presentation's charts and the code that draws them ([notes](dashboards/slides/README.md)) |
 | `docs/` | Concept note, plans, results, the review register |
@@ -254,6 +269,14 @@ changes no model.
   differences of 0.1 to 0.2 percentage points, far smaller than the uncertainty intervals.
 - **The snapshot can be rebuilt** from the upstream marts with `scripts/export_bronze_snapshot.py`,
   given access to them.
+- **The snapshot is recorded twice.** Its SHA-256 is pinned in the configuration, and ingestion
+  refuses a file that does not match. [DVC](https://dvc.org) records it as the output of a stage
+  (`dvc.yaml`, `dvc.lock`), so `dvc status` says whether the file has changed and
+  `dvc repro bronze_snapshot` rebuilds it. The file stays in Git: no DVC remote and no DVC install
+  are needed to run anything here. A test compares both records with the file.
+- **The environment is fixed in a [Dockerfile](Dockerfile)** and CI runs the tests inside the image.
+  Package versions are bounded in `pyproject.toml`, not locked, so two builds made months apart can
+  differ in minor versions.
 
 ## Not built yet
 

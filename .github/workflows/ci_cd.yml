@@ -28,3 +28,14 @@ jobs:
       - name: Validate Databricks Asset Bundle
         if: env.DATABRICKS_HOST != ''
         run: databricks bundle validate -t dev
+
+  # Builds the image from the Dockerfile and runs the same lint and tests inside it, so the
+  # Dockerfile is checked on every push rather than only when someone builds it by hand.
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t grid-carbon-intensity-mlops .
+      - name: Run linter & unit tests inside the image
+        run: docker run --rm grid-carbon-intensity-mlops

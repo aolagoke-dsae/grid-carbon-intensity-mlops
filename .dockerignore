@@ -1,0 +1,27 @@
+# Keep the image to what Git tracks. Everything below is either local state, a credential,
+# or a folder that is deliberately not published (see .gitignore).
+.git/
+.env
+.venv/
+.databricks/
+.dvc/cache/
+.dvc/tmp/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+*.whl
+
+# Local data stores and MLflow tracking
+mlruns/
+mlflow.db*
+data/lakehouse_local/
+
+# Never published: the history backup, the local design pack, the review bundle
+backups/
+dashboards/design/
+_repo_review_bundle.txt

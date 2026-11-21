@@ -1,0 +1,18 @@
+# DVC records the pinned Bronze snapshot: what command rebuilds it, and the hash and size of
+# the file (in dvc.lock). The file itself stays in Git (cache: false), so a clone needs no
+# DVC remote and no DVC install to run the pipeline or the tests.
+#
+#   dvc status                  # says whether the file still matches dvc.lock
+#   dvc repro bronze_snapshot   # rebuilds it; needs the upstream repository checked out
+#                               # next to this one (see data/bronze_snapshot/README.md)
+#
+# After a deliberate rebuild, update `bronze_snapshot_sha256` in src/carbon_mlops/config.py
+# as well; the tests compare both records against the file.
+stages:
+  bronze_snapshot:
+    desc: Hourly generation and carbon intensity for DE-LU and FR, 2024-2025, from the upstream marts
+    cmd: python scripts/export_bronze_snapshot.py --upstream-repo ../grid-carbon-intensity
+    outs:
+      - data/bronze_snapshot/entsoe_generation_sample.parquet:
+          cache: false
+          persist: true
