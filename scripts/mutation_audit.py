@@ -832,8 +832,15 @@ MUTATIONS: tuple[Mutation, ...] = (
         "R3",
         "CI builds the image but never runs the tests inside it",
         WORKFLOW,
-        "        run: docker run --rm grid-carbon-intensity-mlops",
-        "        run: docker image ls grid-carbon-intensity-mlops",
+        "        run: docker run --rm grid-carbon-intensity-mlops\n",
+        "        run: docker image ls grid-carbon-intensity-mlops\n",
+    ),
+    Mutation(
+        "R3",
+        "CI never runs the local pipeline inside the image",
+        WORKFLOW,
+        "        run: docker run --rm grid-carbon-intensity-mlops make run-local",
+        "        run: docker run --rm grid-carbon-intensity-mlops make --dry-run run-local",
     ),
     Mutation(
         "R4",

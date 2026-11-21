@@ -188,7 +188,8 @@ Do not use `--run`: the analysis plan allows one execution, and it has been used
 ### In a container
 
 The [Dockerfile](Dockerfile) gives the same environment as CI: Python 3.11 and the same install
-command. CI builds the image and runs the lint and the tests inside it on every push.
+command. CI builds the image and runs the lint, the tests and the local pipeline inside it on
+every push.
 
 ```bash
 docker build -t grid-carbon-intensity-mlops .
@@ -274,7 +275,8 @@ changes no model.
   (`dvc.yaml`, `dvc.lock`), so `dvc status` says whether the file has changed and
   `dvc repro bronze_snapshot` rebuilds it. The file stays in Git: no DVC remote and no DVC install
   are needed to run anything here. A test compares both records with the file.
-- **The environment is fixed in a [Dockerfile](Dockerfile)** and CI runs the tests inside the image.
+- **The environment is fixed in a [Dockerfile](Dockerfile)** and CI runs the tests and the local
+  pipeline inside the image.
   Package versions are bounded in `pyproject.toml`, not locked, so two builds made months apart can
   differ in minor versions.
 

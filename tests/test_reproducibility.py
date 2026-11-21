@@ -53,13 +53,15 @@ def test_dockerfile_uses_the_python_version_and_install_command_of_ci() -> None:
     assert re.search(r"^USER (?!root)\w+$", dockerfile, re.MULTILINE), "must not run as root"
 
 
-def test_ci_builds_the_image_and_runs_the_tests_inside_it() -> None:
+def test_ci_builds_the_image_and_runs_the_tests_and_the_pipeline_inside_it() -> None:
     runs = [s.get("run", "") for s in _workflow()["jobs"]["docker-image"]["steps"]]
     built = [re.search(r"docker build -t (\S+) \.$", r) for r in runs]
     tag = next(m.group(1) for m in built if m)
 
     # No command after the tag: the container runs the image's own CMD, which is `make test`.
     assert f"docker run --rm {tag}" in runs
+    assert f"docker run --rm {tag} make run-local" in runs
+    assert "run-local:" in (ROOT / "Makefile").read_text(encoding="utf-8")
 
 
 def test_the_image_leaves_out_credentials_and_unpublished_folders() -> None:
