@@ -754,28 +754,33 @@ def s08():
         f"on purpose, one line at a time, {m['breakages']} ways, and every one of those breakages is caught."))
 
     def node(x, y, w, label, name):
-        b = card(s, x, y, w, 0.6, fill="bg1", line="pri", name=name)
+        b = card(s, x, y, w, 0.5, fill="bg1", line="pri", name=name)
         label_shape(b, label, size=13)
 
-    text(s, 0.5, 2.0, 7.4, 0.32, [[("Training job  ", {"bold": True, "size": 16}), ("run when the model changes", {"color": "sec", "size": 12})]],
-         size=16, name="Training job label")
+    def job_label(y, job, when):
+        text(s, 0.5, y, 7.4, 0.32, [[(f"{job}  ", {"bold": True, "size": 16}), (when, {"color": "sec", "size": 12})]],
+             size=16, name=f"{job} label")
+
+    job_label(2.0, "Training job", "run when the model changes")
     xs = [0.5, 2.4, 4.3, 6.2]
     for x, t in zip(xs, ["Ingest", "Build features", "Train challenger", "Gate"]):
-        node(x, 2.45, 1.6, t, f"Training: {t}")
+        node(x, 2.42, 1.6, t, f"Training: {t}")
     for a, b in zip(xs[:-1], xs[1:]):
-        arrow(s, a + 1.62, 2.75, b - 0.02, 2.75, color="tx1", width=1.25)
+        arrow(s, a + 1.62, 2.67, b - 0.02, 2.67, color="tx1", width=1.25)
     for x, t in zip([0.5, 2.4, 6.2], ["G1: file hash pinned", "G2: nothing from after the forecast moment", "G3: coverage, skill, champion"]):
-        text(s, x, 3.1, 1.75, 0.5, t, size=11, color="sec", name="Gate note")
+        text(s, x, 2.96, 1.75, 0.45, t, size=11, color="sec", name="Gate note")
 
-    text(s, 0.5, 3.85, 7.4, 0.32, [[("Inference job  ", {"bold": True, "size": 16}), ("on a schedule (paused in the dev target)", {"color": "sec", "size": 12})]],
-         size=16, name="Inference job label")
-    node(0.5, 4.95, 1.9, "Recalibrate champion", "Inference: recalibrate")
+    job_label(3.5, "Inference job", "on a schedule (paused in the dev target)")
+    node(0.5, 4.46, 1.9, "Recalibrate champion", "Inference: recalibrate")
     for k, t in enumerate(["Score the next 24 hours", "Monitor coverage and drift", "Write dashboard extracts"]):
-        y = 4.3 + 0.72 * k
+        y = 3.88 + 0.58 * k
         node(3.4, y, 3.0, t, f"Inference: {t}")
-        arrow(s, 2.42, 5.25, 3.38, y + 0.3, color="tx1", width=1.25)
-    text(s, 0.5, 6.48, 7.6, 0.3, f"Verified on the workspace: every task has succeeded; the champion is model version {m['champion_version']}.",
-         size=12, color="sec", name="Workspace note")
+        arrow(s, 2.42, 4.71, 3.38, y + 0.25, color="tx1", width=1.25)
+
+    job_label(5.72, "Agent check job", "run on demand: 18 questions, every figure traced to a tool")
+    node(0.5, 6.1, 1.9, "Keyword router", "Agent check: keyword router")
+    node(3.4, 6.1, 3.0, "Hosted model chooses the tool", "Agent check: model router")
+    arrow(s, 2.42, 6.35, 3.38, 6.35, color="tx1", width=1.25)
 
     for i, (big, label) in enumerate([(str(m["tests"]), "automated tests, about 15 seconds"),
                                       (f"{m['breakages']} of {m['breakages']}", "deliberate breakages caught")]):
@@ -783,15 +788,17 @@ def s08():
         card(s, bx, 2.0, 2.165, 1.55, name=f"Stat card {i + 1}")
         text(s, bx + 0.18, 2.1, 1.85, 0.6, big, size=30, bold=True, color="pri", name=f"Stat {i + 1}")
         text(s, bx + 0.18, 2.78, 1.85, 0.7, label, size=12, name=f"Stat {i + 1} label")
-    card(s, 8.4, 3.7, 4.43, 2.6, name="Breakage explanation card")
+    card(s, 8.4, 3.7, 4.43, 2.2, name="Breakage explanation card")
     text(s, 8.6, 3.82, 4.05, 0.32, "What a “deliberate breakage” is", size=14, bold=True, name="Breakage heading")
-    text(s, 8.6, 4.2, 4.05, 2.5, [
+    text(s, 8.6, 4.2, 4.05, 1.65, [
         "A script breaks the code on purpose, one line at a time, and reruns the tests. For example:",
         "– let a feature look one hour ahead",
         "– count coverage on one bound only",
         "– promote a model that failed the gate",
         "A breakage the tests miss is a gap in the tests.",
     ], size=12, spacing=4, name="Breakage text")
+    text(s, 8.4, 6.08, 4.43, 0.5, f"Verified on the workspace: every task has succeeded; the champion is model version {m['champion_version']}.",
+         size=12, color="sec", name="Workspace note")
     back_link(s)
 
 
