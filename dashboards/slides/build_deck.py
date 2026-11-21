@@ -744,9 +744,9 @@ def s07():
 def s08():
     m = D["mlops"]
     s = new_slide("MLOps on Databricks" if INTERVIEW else "Backup: MLOps on Databricks", "Every claim is enforced by a gate, a test or a deliberate breakage",
-                  "Two pipeline jobs, deployed as one Databricks Asset Bundle on serverless compute; models and tables governed in Unity Catalog.",
+                  "Three Databricks jobs, deployed as one Databricks Asset Bundle on serverless compute; models and tables governed in Unity Catalog.",
                   notes=(
-        "Two pipeline jobs run on Databricks. The training job ingests, builds features, trains a challenger and puts it through the "
+        "Three jobs run on Databricks. The training job ingests, builds features, trains a challenger and puts it through the "
         "gate. The inference job recalibrates the champion on the latest errors, then scores the next 24 hours, computes "
         "monitoring and writes the dashboard extracts. A third, small job checks the question-answering agent. Three gates guard the pipeline: the data file's hash is pinned, no "
         "feature may come from after the moment of forecasting, and a model is promoted only if it passes the coverage, skill "
@@ -777,7 +777,7 @@ def s08():
     text(s, 0.5, 6.48, 7.6, 0.3, f"Verified on the workspace: every task has succeeded; the champion is model version {m['champion_version']}.",
          size=12, color="sec", name="Workspace note")
 
-    for i, (big, label) in enumerate([(str(m["tests"]), "automated tests, about 13 seconds"),
+    for i, (big, label) in enumerate([(str(m["tests"]), "automated tests, about 15 seconds"),
                                       (f"{m['breakages']} of {m['breakages']}", "deliberate breakages caught")]):
         bx = 8.4 + i * 2.265
         card(s, bx, 2.0, 2.165, 1.55, name=f"Stat card {i + 1}")
