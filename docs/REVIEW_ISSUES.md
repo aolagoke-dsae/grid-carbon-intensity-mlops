@@ -512,7 +512,8 @@ local speaker notes that is skipped where those notes do not exist. None of them
 After D12, R6 and R7 (2026-11-22): 152 tests, 3 of them new, lint clean. R6 was confirmed by starting the
 agent from a folder outside the repository, which failed before the change. Breakage audit: 3 new
 cases, 117 in total. The 3 R6 cases and the 5 G3 cases, which include the crossing repair that D12
-describes, were run: 8 of 8 caught. The other 109 cases were not re-run after these changes.
+describes, were run: 8 of 8 caught. A full audit followed on 2026-11-22 at commit `317c89b`: the untouched copy passed and 117 of 117
+breakages were caught, 0 survived, 0 stale.
 
 ## Dependencies
 
