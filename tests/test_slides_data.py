@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from types import ModuleType
 
+import pandas as pd
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -98,3 +99,35 @@ def test_line_endings_do_not_change_a_table_fingerprint(
             sorted(v for k, v in EXPORT.source_fingerprint().items() if k.endswith(".csv"))
         )
     assert prints[0] == prints[1]
+
+
+def test_local_speaker_notes_quote_the_current_figures() -> None:
+    """Guards a local, untracked notes file; skipped wherever that file does not exist."""
+    notes_path = REPO_ROOT / "dashboards" / "design" / "followup_answers.md"
+    if not notes_path.exists():
+        pytest.skip("the local speaker notes are not part of the repository")
+    notes = " ".join(notes_path.read_text(encoding="utf-8").split())
+    data = _load()
+    tests, breakages = data["mlops"]["tests"], data["mlops"]["breakages"]
+    items, n_open = data["backup"]["review_items"], len(data["backup"]["review_open"])
+    words = "zero one two three four five six seven eight nine ten eleven twelve".split()
+
+    expected = [
+        f"{tests} tests, {breakages} deliberate breakages, {items} register items, {n_open} open",
+        f"now all {breakages} are caught",
+        f"from 28 cases to {breakages}",
+        f"{words[n_open].capitalize()} findings are open",
+    ]
+    calibration = pd.read_csv(REPO_ROOT / "dashboards/data/locked_test_calibration.csv", dtype=str)
+    for zone, breakdown, level in (
+        ("FR", "horizon_bucket", "day_ahead_13_24h"),
+        ("DE-LU", "renewable_quartile", "Q4"),
+    ):
+        row = calibration[
+            (calibration["zone"] == zone)
+            & (calibration["breakdown"] == breakdown)
+            & (calibration["level"] == level)
+        ]
+        expected.append(f"{100 * float(row['coverage'].iloc[0]):.1f}%")
+    missing = [text for text in expected if text not in notes]
+    assert not missing, f"the speaker notes no longer match the project: {missing}"
