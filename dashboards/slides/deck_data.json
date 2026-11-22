@@ -583,8 +583,8 @@
   }
  },
  "mlops": {
-  "tests": 149,
-  "breakages": 114,
+  "tests": 152,
+  "breakages": 117,
   "champion_version": 7,
   "recalibration_runs": 5
  },
@@ -948,7 +948,7 @@
     ]
    }
   },
-  "review_items": 118,
+  "review_items": 121,
   "review_open": [
    "D4",
    "F15",

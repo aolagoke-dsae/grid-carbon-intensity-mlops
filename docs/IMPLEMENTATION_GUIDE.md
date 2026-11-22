@@ -48,7 +48,7 @@ This plan organizes delivery into **four 1-week Sprints**. Every Sprint delivers
 
 ### Sprint 2 Definition of Done (Review: Nov 28)
 * GitHub Actions CI passes (`make test` + `databricks bundle validate -t dev`).
-* Both DAB jobs (`carbon_training_pipeline` and `carbon_batch_inference`) succeed on Databricks Free Edition (Serverless), registering `@champion` in Unity Catalog and exporting `latest_24h_forecasts.csv`.
+* The training and inference DAB jobs (`carbon_training_pipeline` and `carbon_batch_inference`) succeed on Databricks Free Edition (Serverless), registering `@champion` in Unity Catalog and exporting `latest_24h_forecasts.csv`. (A third job, `carbon_qa_agent_check`, was added with the agent in Sprint 4.)
 
 ---
 
@@ -78,7 +78,7 @@ This plan organizes delivery into **four 1-week Sprints**. Every Sprint delivers
 * **US-4.2 — Hard Code Freeze & Documentation Polish (Target: Dec 8):**
   * *Story:* As a presenter, I want all code frozen by end of Dec 8, MLflow Trace & Databricks Job DAG screenshots saved to `docs/images/`, and root `README.md` finalized with architecture diagram, `H1–H3` findings, and Tableau Public link.
 * **US-4.3 — Demo Backup & Presentation Rehearsal (Dec 9 – Dec 10):**
-  * *Story:* As a speaker, I want 30-second fallback screen recordings of the Databricks Job run, MLflow Trace waterfall, and Tableau dashboard, plus two timed 10–12 minute dry runs.
+  * *Story:* As a speaker, I want 30-second fallback screen recordings of the Databricks Job run, MLflow Trace waterfall, and Tableau dashboard, plus two timed dry runs of the 15-minute presentation.
 
 ### Sprint 4 Definition of Done (Review: Dec 10)
 * Clean `git status`, green GitHub Actions badge, live Tableau Public link, verified MLflow Traces (`Gate G4`), and rehearsed deck ready for **December 11**.

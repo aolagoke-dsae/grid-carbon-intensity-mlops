@@ -7,6 +7,29 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+def project_root() -> Path | None:
+    """The repository checkout this package runs from, or None when installed as a wheel."""
+    candidate = Path(__file__).resolve().parents[2]
+    return candidate if (candidate / "pyproject.toml").is_file() else None
+
+
+def repo_path(relative: str) -> Path:
+    """A path inside the repository that is valid from any working directory.
+
+    Run from the repository root it is the plain relative path, so nothing written to logs or
+    tables changes. From another folder it points back to the checkout. An installed wheel has
+    no checkout (a Databricks job, for one), and the path stays relative to the working
+    directory.
+    """
+    root = project_root()
+    if root is None:
+        return Path(relative)
+    try:
+        return Path(os.path.relpath(root / relative, Path.cwd()))
+    except ValueError:  # Windows: the working directory is on another drive
+        return root / relative
+
+
 @dataclass(frozen=True)
 class CarbonMLOpsConfig:
     """Configuration governing zones, horizons, 4-way splits, CQR gates, and I/O."""
@@ -41,13 +64,17 @@ class CarbonMLOpsConfig:
     # Unity Catalog & local Parquet paths
     catalog: str = "workspace"
     schema: str = "carbon_mlops"
-    local_data_dir: Path = Path("data")
-    bronze_snapshot_path: Path = Path("data/bronze_snapshot/entsoe_generation_sample.parquet")
+    local_data_dir: Path = field(default_factory=lambda: repo_path("data"))
+    bronze_snapshot_path: Path = field(
+        default_factory=lambda: repo_path(
+            "data/bronze_snapshot/entsoe_generation_sample.parquet"
+        )
+    )
     # Pinned SHA-256 of the committed snapshot (Gate G1). Regenerate the file with
     # scripts/export_bronze_snapshot.py and update this value and the snapshot README together.
     bronze_snapshot_sha256: str = "c3dc7796be7589eb72c5363277057b164493f909f81500f982d4f3160eea34a9"
-    dashboard_data_dir: Path = Path("dashboards/data")
-    images_dir: Path = Path("docs/images")
+    dashboard_data_dir: Path = field(default_factory=lambda: repo_path("dashboards/data"))
+    images_dir: Path = field(default_factory=lambda: repo_path("docs/images"))
 
     # Serverless-safe pip requirements for MLflow PyFunc UDF
     udf_pip_requirements: tuple[str, ...] = (

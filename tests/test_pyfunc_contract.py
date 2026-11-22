@@ -31,7 +31,10 @@ from carbon_mlops.models.evaluate_gate import (
     pinball_ratio,
     summarize_gate_predictions,
 )
-from carbon_mlops.models.pyfunc_wrapper import ConformalCarbonForecaster
+from carbon_mlops.models.pyfunc_wrapper import (
+    ConformalCarbonForecaster,
+    enforce_cqr_invariants,
+)
 from carbon_mlops.models.train import (
     compute_interval_metrics,
     recalibrate_forecaster,
@@ -118,6 +121,23 @@ def test_delta_target_mode_adds_origin_intensity() -> None:
 
     with pytest.raises(ValueError, match="target_mode"):
         ConformalCarbonForecaster(models_by_zone=models, conformal_offsets={}, target_mode="x")
+
+
+def test_reported_p50_is_the_middle_value_when_the_model_median_leaves_its_bounds() -> None:
+    # Rows: median inside the calibrated bounds, below the lower one, above the upper one.
+    raw_p05 = np.array([50.0, 50.0, 50.0])
+    raw_p50 = np.array([60.0, 40.0, 99.0])
+    raw_p95 = np.array([90.0, 90.0, 90.0])
+    p05, p50, p95 = enforce_cqr_invariants(
+        raw_p05, raw_p50, raw_p95, q_low=np.full(3, 2.0), q_high=np.full(3, 3.0)
+    )
+
+    # Calibrated bounds are 48 and 93. Inside them the model median is reported unchanged.
+    assert (p05[0], p50[0], p95[0]) == (48.0, 60.0, 93.0)
+    # Outside them the interval stretches to hold the model median, and the published p50 is
+    # the calibrated bound next to it. It is then not the model's own median.
+    assert (p05[1], p50[1], p95[1]) == (40.0, 48.0, 93.0)
+    assert (p05[2], p50[2], p95[2]) == (48.0, 93.0, 99.0)
 
 
 def test_conformal_quantile_is_the_finite_sample_order_statistic() -> None:

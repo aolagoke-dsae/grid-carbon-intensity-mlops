@@ -24,7 +24,13 @@ def enforce_cqr_invariants(
     q_low: np.ndarray,
     q_high: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Apply two-sided CQR margins and enforce 0 <= p05 <= p50 <= p95 non-crossing."""
+    """Apply two-sided CQR margins and enforce 0 <= p05 <= p50 <= p95 non-crossing.
+
+    Crossing is repaired by sorting the three values of each row. The bounds are then the
+    smallest and largest of them, and the reported p50 is the middle one. When the model's
+    median lies outside its calibrated bounds, p50 is therefore the nearer bound and not
+    the model's own median.
+    """
     p05 = np.clip(raw_p05 - q_low, a_min=0.0, a_max=None)
     p95 = np.clip(raw_p95 + q_high, a_min=0.0, a_max=None)
     p50 = np.clip(raw_p50, a_min=0.0, a_max=None)

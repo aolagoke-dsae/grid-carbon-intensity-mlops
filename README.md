@@ -97,6 +97,10 @@ the autocorrelation of hourly data. The two agree in all three cases.
 - **One season.** About three and a half months of autumn and early winter, with no summer.
 - **Forecast uncertainty only.** The interval assumes median emission factors. For FR, the
   uncertainty of the factors themselves is larger than the forecast interval.
+- **The published median is the middle of three values.** Where the model's lower, middle and upper
+  forecasts cross, they are sorted. In 342 of 83,281 validation rows (0.41%), mostly at a 1-hour lead,
+  the published `p50` is therefore a calibrated bound and not the model's own median. In those rows
+  it was the closer of the two to the realized value.
 - **Production-based intensity.** Cross-border flows are not accounted for.
 - **Earlier figures are retired.** Coverage numbers of 91.63% and 89.26% reported before the review
   came from an uncommitted notebook and cannot be reproduced.
@@ -177,7 +181,7 @@ reviewed every change, and nothing reached this repository without my push.
 **What the review caught**
 
 Before freezing the model, on 15 November 2026, I conducted an adversarial review of the whole
-repository. Every issue is logged in the register, which now holds 118 items, 9 of them open. Two
+repository. Every issue is logged in the register, which now holds 121 items, 9 of them open. Two
 defects that the test suite of the time passed:
 
 - **B6:** the provenance test compared a file's hash with itself, so it could never fail.

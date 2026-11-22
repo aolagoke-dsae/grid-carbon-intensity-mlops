@@ -913,6 +913,27 @@ MUTATIONS: tuple[Mutation, ...] = (
         "backups/\n",
         "",
     ),
+    Mutation(
+        "R6",
+        "default paths ignore the checkout when run from another folder",
+        CONFIG,
+        "return Path(os.path.relpath(root / relative, Path.cwd()))",
+        "return Path(relative)",
+    ),
+    Mutation(
+        "R6",
+        "default paths turn absolute when run from the repository root",
+        CONFIG,
+        "return Path(os.path.relpath(root / relative, Path.cwd()))",
+        "return root / relative",
+    ),
+    Mutation(
+        "R6",
+        "an installed wheel is taken for a repository checkout",
+        CONFIG,
+        "    if root is None:\n        return Path(relative)\n",
+        "    if root is None:\n        root = Path(__file__).resolve().parents[2]\n",
+    ),
 )
 
 

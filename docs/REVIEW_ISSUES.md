@@ -84,6 +84,7 @@ Locked-test coverage after purging: DE-LU 89.67%, FR 80.00% (Gate-Val: DE-LU 92.
 | D9 | "Guaranteed finite-sample coverage" is an overclaim for autocorrelated data | `CONCEPT_NOTE.md` §1 | done |
 | D10 | Conformal quantile via `np.quantile(method="higher")` landed one rank too high (intervals slightly too wide) | `models/conformal.py` | done |
 | D11 | FR at h=1 narrowly loses to persistence on Gate-Val (MAE 1.398 vs 1.372); every bucket still wins | `train.py` | accepted: reported as a limitation; the bucket-level baseline check is enforced by E3 |
+| D12 | Found by the read-through of 2026-11-22: crossing quantiles are repaired by sorting the three values of a row, so where the model's median lies outside its calibrated bounds the published `p50` is the nearer bound, not the model's median. On Gate-Val this is 342 of 83,281 rows (0.41%; 214 in DE-LU, 128 in FR). The docstring called the output the median without saying so. Decision: the forecasts are not changed. Keeping the model's median instead would leave both bounds and the coverage exactly as they are and make the median worse (Gate-Val pinball 31.866 against 31.854 in DE-LU, 1.6322 against 1.6317 in FR; mean absolute error in the affected rows 24.75 against 19.92 g and 1.22 against 0.89 g). The behaviour is now stated in the docstring and the README and fixed by a test | `pyfunc_wrapper.py` (`enforce_cqr_invariants`), `README.md` | done: description corrected, forecasts unchanged; CI pending. The Gate-Val counts come from a one-off check and no test recomputes them; the held-out period was not examined |
 
 Phase D outcome (all choices made on Gate-Val only; the locked test was not scored):
 
@@ -490,6 +491,8 @@ Neither changes the model, the data or any result.
 | R3 | CI job `docker-image` builds the image and runs the lint and the tests inside it, then the local pipeline (`make run-local`) | `.github/workflows/ci_cd.yml` | build and tests: done 2026-11-21, the job's first run, on `40aec70`, was green. Pipeline step: done 2026-11-21, its first run, on `bca9709`, was green and took 11 seconds. Its log was not read, so what is known is that the pipeline exited without error. It shows that the pipeline finishes in the image, not that its numbers equal those of another platform |
 | R4 | `.dockerignore` keeps the Git history, credentials, local data stores and the unpublished folders (`backups/`, `dashboards/design/`) out of the image | `.dockerignore` | done 2026-11-21, CI green on `40aec70`: a test checks the list; the image content itself was not inspected |
 | R5 | Limit: package versions are bounded in `pyproject.toml`, not locked, so the image is not bit-for-bit repeatable over time. The DVC record uses MD5, which detects change but is not a security check; the SHA-256 pin of gate G1 remains the check ingestion enforces | | accepted |
+| R6 | Found by the read-through of 2026-11-22: the default paths in the config were relative to the working directory, so the agent and the local pipeline failed with a bare `FileNotFoundError` when started outside the repository root. Fix: when the package runs from a checkout, the defaults point into it; from the root they are the same relative paths as before, and an installed wheel (a Databricks job) is unchanged. Limit: the local MLflow store is still created in the working directory | `config.py` (`repo_path`) | implemented and verified locally; CI pending; not run on Databricks |
+| R7 | Found by the read-through of 2026-11-22: the sprint plan said "both" bundle jobs where the bundle has three, and planned dry runs of 10 to 12 minutes for a 15-minute presentation. Both lines corrected | `docs/IMPLEMENTATION_GUIDE.md` | done; wording only |
 
 Verification (2026-11-21): lint clean; 134 tests, 5 of them new; breakage audit 104 of 104 caught,
 including 5 new cases (a wrong hash in `dvc.lock`, the snapshot moved into the DVC cache, a different
@@ -505,6 +508,11 @@ full run had been checked with a single audit case only: the README section on A
 development (with a test that ties its figures to this register), `AGENTS.md` added to the files
 the audit copies (the README links to it, so the scratch copy failed without it), and a test for
 local speaker notes that is skipped where those notes do not exist. None of them added an audit case.
+
+After D12, R6 and R7 (2026-11-22): 152 tests, 3 of them new, lint clean. R6 was confirmed by starting the
+agent from a folder outside the repository, which failed before the change. Breakage audit: 3 new
+cases, 117 in total. The 3 R6 cases and the 5 G3 cases, which include the crossing repair that D12
+describes, were run: 8 of 8 caught. The other 109 cases were not re-run after these changes.
 
 ## Dependencies
 
