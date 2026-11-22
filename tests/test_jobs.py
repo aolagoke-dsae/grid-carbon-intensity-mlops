@@ -312,6 +312,21 @@ def test_the_model_task_tries_every_model_and_fails_if_one_failed(
         jobs.agent_check_llm_main()
     assert tried == ["a", "b", "c"], "a failing model must not stop the ones after it"
 
+    # A failure of any kind, such as a refused sign-in, must not stop the other models either.
+    tried.clear()
+
+    def fake_run_auth(router: str = "keyword", model: str | None = None) -> str:
+        tried.append(model)
+        if model == "a":
+            raise ConnectionError("sign-in refused")
+        return "saved"
+
+    monkeypatch.setattr(jobs, "run_agent_check_job", fake_run_auth)
+    with pytest.raises(RuntimeError, match="^a: sign-in refused$"):
+        jobs.agent_check_llm_main()
+    assert tried == ["a", "b", "c"]
+    monkeypatch.setattr(jobs, "run_agent_check_job", fake_run)
+
     # With no list, the configured model is used.
     tried.clear()
     monkeypatch.setattr(sys, "argv", ["carbon-agent-check-llm"])

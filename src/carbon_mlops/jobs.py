@@ -310,7 +310,8 @@ def agent_check_llm_main() -> None:
     for model in models:
         try:
             run_agent_check_job(router="llm", model=model)
-        except RuntimeError as exc:  # try the remaining models before failing the task
+        except Exception as exc:  # any failure: try the remaining models before failing
+            logger.exception("Agent check failed for router model %s", model)
             errors.append(f"{model}: {exc}")
     if errors:
         raise RuntimeError("; ".join(errors))

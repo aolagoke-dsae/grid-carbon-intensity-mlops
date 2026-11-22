@@ -27,6 +27,7 @@ from carbon_mlops.agent.qa_agent import (
 )
 from carbon_mlops.agent.tools import (
     TOOLS,
+    NoDataError,
     ToolInputError,
     check_model_health,
     compare_zones_24h,
@@ -220,6 +221,40 @@ def test_tools_on_the_committed_snapshots_match_an_independent_computation() -> 
         row = latest[(latest["zone"] == zone) & (latest["metric"] == "coverage_7d")].iloc[0]
         facts = check_model_health(zone, cfg=CFG)["facts"]
         assert facts["weekly_coverage_pct"] == pytest.approx(100 * row["value"])
+
+
+def _empty_latest_week(table: pd.DataFrame) -> pd.DataFrame:
+    """The table as the monitoring job writes a week in which no forecast was scored."""
+    latest = table["monitor_date"] == table["monitor_date"].max()
+    keep = ~(latest & (table["metric"] == "median_skill_vs_persistence"))
+    out = table[keep].copy()
+    cell = (out["monitor_date"] == out["monitor_date"].max()) & (out["metric"] == "coverage_7d")
+    out.loc[cell, ["value", "n", "status"]] = [float("nan"), 0, "no_data"]
+    return out
+
+
+def test_model_health_says_so_when_the_latest_week_has_no_scored_forecasts() -> None:
+    empty = _empty_latest_week(_monitoring(0.90, "ok", 0.2))
+    with pytest.raises(NoDataError, match="No scored forecasts"):
+        check_model_health("FR", monitoring=empty, cfg=CFG)
+    # A skill that could not be computed is no data either.
+    no_skill = _monitoring(0.90, "ok", float("nan"))
+    with pytest.raises(NoDataError):
+        check_model_health("FR", monitoring=no_skill, cfg=CFG)
+
+    reply = answer("Is the model healthy in France?", CFG, tool_inputs={"monitoring": empty})
+    assert reply.text == qa_agent.NO_DATA and reply.result is None and reply.grounded
+    assert re.search(r"\d", reply.text) is None
+
+
+def test_a_week_without_data_is_not_counted_as_outside_the_band() -> None:
+    table = _monitoring(0.90, "ok", 0.2)
+    first = (table["monitor_date"] == table["monitor_date"].min()) & (
+        table["metric"] == "coverage_7d"
+    )
+    table.loc[first, ["value", "status"]] = [float("nan"), "no_data"]
+    facts = check_model_health("FR", monitoring=table, cfg=CFG)["facts"]
+    assert facts["weeks_outside_band"] == 1  # only the week that was below the band
 
 
 def test_every_tool_is_traced_and_registered() -> None:

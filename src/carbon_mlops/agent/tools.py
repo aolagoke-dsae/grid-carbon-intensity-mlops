@@ -40,6 +40,10 @@ class ToolInputError(ValueError):
     """The caller asked for something the tool cannot answer (unknown zone, bad window)."""
 
 
+class NoDataError(ToolInputError):
+    """The request is valid, but the table holds nothing to answer it from."""
+
+
 def load_forecasts(cfg: CarbonMLOpsConfig | None = None) -> pd.DataFrame:
     """The latest 24-hour forecast per zone: the Gold table on Databricks, its snapshot locally."""
     cfg = cfg or CarbonMLOpsConfig()
@@ -202,9 +206,14 @@ def check_model_health(
     latest_date = rows["monitor_date"].max()
     latest = rows[rows["monitor_date"] == latest_date].set_index("metric")
 
+    # A week with no scored forecasts is written with an empty coverage and no skill row.
+    if "coverage_7d" not in latest.index or "median_skill_vs_persistence" not in latest.index:
+        raise NoDataError(f"No scored forecasts for {zone!r} in the week ending {latest_date}")
     coverage_row = latest.loc["coverage_7d"]
     coverage = float(coverage_row["value"])
     skill = float(latest.loc["median_skill_vs_persistence", "value"])
+    if np.isnan(coverage) or np.isnan(skill):
+        raise NoDataError(f"No scored forecasts for {zone!r} in the week ending {latest_date}")
     drift = latest[latest["metric_group"] == DRIFT_GROUP]
     history = rows[rows["metric"] == "coverage_7d"]
     in_band = float(coverage_row["lower_bound"]) <= coverage <= float(coverage_row["upper_bound"])
@@ -221,7 +230,7 @@ def check_model_health(
             "drift_features_on_alert": int((drift["status"] == "alert").sum()),
             "drift_features_checked": int(len(drift)),
             "weeks_monitored": int(len(history)),
-            "weeks_outside_band": int((history["status"] != "ok").sum()),
+            "weeks_outside_band": int(history["status"].isin(OUTSIDE_BAND).sum()),
             "forecasts_in_week": int(coverage_row["n"]),
         },
         "times": {"week_ending": latest_date.isoformat()},
@@ -233,6 +242,7 @@ def check_model_health(
     }
 
 
+OUTSIDE_BAND = ("below_band", "above_band")
 TOOLS = {
     "find_greenest_window": find_greenest_window,
     "compare_zones_24h": compare_zones_24h,

@@ -177,7 +177,7 @@ reviewed every change, and nothing reached this repository without my push.
 **What the review caught**
 
 Before freezing the model, on 15 November 2026, I conducted an adversarial review of the whole
-repository. Every issue is logged in the register, which now holds 116 items, 9 of them open. Two
+repository. Every issue is logged in the register, which now holds 118 items, 9 of them open. Two
 defects that the test suite of the time passed:
 
 - **B6:** the provenance test compared a file's hash with itself, so it could never fail.

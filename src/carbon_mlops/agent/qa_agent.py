@@ -32,6 +32,7 @@ import pandas as pd
 from carbon_mlops.agent.tools import (
     CHOICES,
     TOOLS,
+    NoDataError,
     ToolInputError,
     ToolResult,
     fact_values,
@@ -79,6 +80,10 @@ NEEDS_ZONE = "Which zone do you mean: Germany-Luxembourg (DE-LU) or France (FR)?
 BAD_REQUEST = (
     "I cannot answer that as asked: the request is outside what the tools accept, for example an "
     "unknown zone or a window longer than the forecast."
+)
+NO_DATA = (
+    "I cannot say: the latest monitoring week for that zone holds no scored forecasts, so there "
+    "is no coverage or error to report."
 )
 UNGROUNDED = (
     "I could not produce an answer in which every number is traceable, so I am not answering."
@@ -400,6 +405,9 @@ def answer(
 
     try:
         result = TOOLS[route.tool](**route.args, cfg=cfg, **(tool_inputs or {}))
+    except NoDataError as exc:
+        logger.info("Tool has nothing to answer from: %s", exc)
+        return Answer(NO_DATA, route, used, grounded=True)
     except ToolInputError as exc:
         logger.info("Tool refused the request: %s", exc)
         return Answer(BAD_REQUEST, route, used, grounded=True)
