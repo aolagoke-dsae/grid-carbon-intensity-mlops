@@ -47,10 +47,25 @@ ZONE_PATTERNS = {
 }
 HEALTH_WORDS = r"health|trust|reliab|coverage|calibrat|drift|monitor|skill|still (good|ok|working)"
 COMPARE_WORDS = (
-    r"compar|versus|vs|both (grids|zones|countries)|two (grids|zones)"
+    r"compar|versus|\bvs\b|both (grids|zones|countries)|two (grids|zones)"
     r"|which (grid|zone|country)|differ"
 )
-WINDOW_WORDS = r"when|window|greenest|cleanest|best (time|hours?)|schedul|shift|charg|\brun\b|start"
+WINDOW_WORDS = (
+    r"window|greenest|cleanest|best (time|hours?)|schedul|shift|charg|\brun\b"
+    r"|low[- ]carbon|flexible|\bloads?\b"
+)
+# Subjects the tables do not hold. A question that names one is refused before any routing,
+# because a keyword such as "cleanest" or a zone name would otherwise pick a tool for it.
+OFF_TOPIC_WORDS = (
+    r"\bprices?\b|\bpric(ed|ing)\b|\bcosts?\b|\beuros?\b|20ac|\btariffs?\b|\bbills?\b"
+    r"|cheap|expensive|weather|\brain|temperature|sun ?rise|sun ?set|football"
+)
+OTHER_PLACES = (
+    r"spain|spanish|poland|polish|ital(y|ian)|belgi|netherlands|dutch|austria|switzerland"
+    r"|swiss|denmark|danish|sweden|swedish|norway|norwegian|finland|portug|czech|ireland"
+    r"|irish|britain|british|england|\buk\b|\busa?\b|united states|america|china|india"
+    r"|brazil|japan|europe"
+)
 CAUTIOUS_WORDS = r"cautious|upper bound|worst[- ]case|conservativ|\bsafe"
 DEFAULT_WINDOW_HOURS = 3
 TIME_FORMAT = "%d %b %Y %H:%M"
@@ -110,9 +125,16 @@ def _zone_in(text: str) -> str | None:
     return found[0] if len(found) == 1 else None
 
 
+def _off_topic(text: str) -> bool:
+    """Whether a lower-cased question names a subject or a place the tables do not hold."""
+    return bool(re.search(OFF_TOPIC_WORDS, text) or re.search(OTHER_PLACES, text))
+
+
 def _hours_in(text: str) -> int | None:
     """The window length a question states in digits, such as "4-hour" or "6h"."""
-    hours = re.search(r"(\d+)\s*-?\s*(?:hours?|hrs?|h)\b", text)
+    hours = re.search(
+        r"(\d+)\s*-?\s*(?:hours?|hrs?|h)\b(?![- ]*(?:forecast|ahead|horizon))", text
+    )
     return int(hours.group(1)) if hours else None
 
 
@@ -142,6 +164,8 @@ def validate_route(route: Route, cfg: CarbonMLOpsConfig | None = None) -> Route 
 def keyword_route(question: str, cfg: CarbonMLOpsConfig | None = None) -> Route | str | None:
     """Route by keywords: a Route, a clarifying question (str), or None when out of scope."""
     text = question.lower()
+    if _off_topic(text):
+        return None
     zone = _zone_in(text)
     both = len([z for z, pattern in ZONE_PATTERNS.items() if re.search(pattern, text)]) == 2
     if re.search(HEALTH_WORDS, text):
@@ -185,8 +209,8 @@ def llm_route(
 ) -> Route | None:
     """Ask a chat model for a tool call. Returns None unless the reply is a valid route.
 
-    A route is also rejected if it names a zone the question does not name, or a window length
-    other than the one the question states.
+    A route is also rejected if the question names a subject the tables do not hold, if it names
+    a zone the question does not name, or a window length other than the one the question states.
     """
     try:
         reply = client.chat.completions.create(
@@ -209,6 +233,9 @@ def llm_route(
     # window that is too long instead of refusing it. Neither is the model's call, so such a
     # route is rejected and the keyword router asks, or refuses, in fixed words.
     text = question.lower()
+    if _off_topic(text):
+        logger.warning("Router model chose a tool for a subject the tables do not hold; rejected")
+        return None
     zone = route.args.get("zone")
     if zone is not None and _zone_in(text) != zone:
         logger.warning("Router model chose a zone the question does not name; rejected")

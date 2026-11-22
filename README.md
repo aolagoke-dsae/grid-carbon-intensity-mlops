@@ -147,7 +147,9 @@ In Germany-Luxembourg (DE-LU), the cleanest 4-hour window by the median forecast
 ```
 
 That answer is computed from the committed forecast snapshot, which is a past forecast, not a live
-one. A question outside the three kinds gets a refusal that contains no figures. The agent never
+one. A question outside the three kinds gets a refusal that contains no figures; so does one that
+names prices, weather or another country, even if it also names a zone. That guard is a word list,
+so a subject missing from it can still be misrouted. The agent never
 does arithmetic and a language model never writes the answer: by default a keyword router picks the
 tool, and with `--router llm` a model picks it instead, falling back to keywords if its reply is not
 a valid tool call.
@@ -175,7 +177,7 @@ reviewed every change, and nothing reached this repository without my push.
 **What the review caught**
 
 Before freezing the model, on 15 November 2026, I conducted an adversarial review of the whole
-repository. Every issue is logged in the register, which now holds 115 items, 9 of them open. Two
+repository. Every issue is logged in the register, which now holds 116 items, 9 of them open. Two
 defects that the test suite of the time passed:
 
 - **B6:** the provenance test compared a file's hash with itself, so it could never fail.

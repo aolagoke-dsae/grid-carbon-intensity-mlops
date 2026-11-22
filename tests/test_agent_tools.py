@@ -243,6 +243,43 @@ def test_keyword_router_handles_the_evaluation_questions(case: dict) -> None:
         assert route is None
 
 
+OFF_TOPIC_QUESTIONS = (
+    "When will electricity prices be lowest in France?",
+    "What is the cheapest window to run a load in Germany?",
+    "When does the sun rise in Germany?",
+    "What is the weather forecast for France this week?",
+    "How does France differ from Spain?",
+    "Germany vs Brazil at football?",
+    "When should I start charging my car in Poland?",
+    "Can I trust the price forecast for France?",
+    "When does the conference start in Germany?",
+)
+
+
+@pytest.mark.parametrize("question", OFF_TOPIC_QUESTIONS)
+def test_questions_the_tables_cannot_answer_are_refused_without_figures(question: str) -> None:
+    # Each of these holds a zone name or a routing keyword, and must still be refused.
+    assert keyword_route(question, CFG) is None
+    reply = answer(question, CFG)
+    assert reply.text == REFUSAL and reply.result is None
+    assert re.search(r"\d", reply.text) is None
+
+
+def test_keyword_router_reads_vs_and_ignores_the_forecast_length() -> None:
+    assert keyword_route("Germany vs the other grid?", CFG) == Route("compare_zones_24h", {})
+    assert keyword_route("Do TVs use more power at night?", CFG) is None  # "vs" inside a word
+    for question in (
+        "What is the cleanest window in the 24h forecast for Germany?",
+        "Cleanest window in Germany, 24 hours ahead?",
+    ):
+        assert keyword_route(question, CFG) == Route(
+            "find_greenest_window", {"zone": "DE-LU", "window_hours": 3, "choose_by": "median"}
+        ), question
+    assert keyword_route("Cleanest 24-hour window in Germany?", CFG) == Route(
+        "find_greenest_window", {"zone": "DE-LU", "window_hours": 24, "choose_by": "median"}
+    )
+
+
 def test_route_validation_rejects_anything_outside_the_schema() -> None:
     ok = Route("find_greenest_window", {"zone": "FR", "window_hours": 4, "choose_by": "median"})
     assert validate_route(ok, CFG) == ok
@@ -377,6 +414,14 @@ def test_a_model_may_not_guess_a_zone_the_question_does_not_name(
     # Seen on four hosted models on 2026-11-18: with no zone in the question, each chose DE-LU.
     reply = answer(question, CFG, router="llm", client=_client(guessed), model="fake")
     assert reply.text == qa_agent.NEEDS_ZONE and reply.result is None
+    assert reply.router_used == "keyword (model reply rejected)"
+
+
+def test_a_model_may_not_pick_a_tool_for_a_subject_the_tables_do_not_hold() -> None:
+    question = "When will electricity prices be lowest in France?"
+    picked = '{"tool": "find_greenest_window", "args": {"zone": "FR", "window_hours": 3}}'
+    reply = answer(question, CFG, router="llm", client=_client(picked), model="fake")
+    assert reply.text == REFUSAL and reply.result is None
     assert reply.router_used == "keyword (model reply rejected)"
 
 
