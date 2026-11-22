@@ -67,6 +67,7 @@ COPIED_FILES: tuple[str, ...] = (
     "pyproject.toml",
     "databricks.yml",
     "README.md",
+    "AGENTS.md",
     "Makefile",
     "LICENSE",
     "Dockerfile",

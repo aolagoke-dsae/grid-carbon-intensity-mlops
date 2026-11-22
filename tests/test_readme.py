@@ -124,6 +124,33 @@ def test_readme_window_savings_match_the_strategy_summary() -> None:
         assert (REPO_ROOT / "dashboards/data" / name).exists()
 
 
+def test_readme_review_figures_match_the_register() -> None:
+    import json
+
+    heading = "## AI-assisted development under written agent instructions"
+    section = README.split(heading)[1].split("\n## ")[0]
+    register = (REPO_ROOT / "docs/REVIEW_ISSUES.md").read_text(encoding="utf-8")
+    # The slide data holds the register's counts, and its own test keeps them current.
+    counts = json.loads(
+        (REPO_ROOT / "dashboards/slides/deck_data.json").read_text(encoding="utf-8")
+    )["backup"]
+    n_items, n_open = counts["review_items"], len(counts["review_open"])
+    assert f"holds {n_items} items, {n_open} of them open" in section
+
+    def row(issue: str) -> str:
+        return next(ln for ln in register.splitlines() if ln.startswith(f"| {issue} |"))
+
+    assert "compares the file to itself" in row("B6") and "**B6:**" in section
+    assert "tautological" in row("C2") and "**C2 and B3:**" in section
+    assert "4 missing FR hours" in row("B3") and "48 wrong" in row("B3")
+    assert "48 wrong 24-hour lag values around four missing hours" in section
+    assert "recalibration" in row("D2") and "(D2)" in section
+    assert "| FR coverage | 89.26% | 80.33% |" in register
+    assert "| DE-LU coverage | 91.63% |" in register
+    assert "reported as 91.63% and 89.26%" in section and "France came to 80.33%" in section
+    assert "review of 2026-11-15" in register and "15 November 2026" in section
+
+
 def test_readme_agent_example_is_what_the_agent_says() -> None:
     import mlflow
 

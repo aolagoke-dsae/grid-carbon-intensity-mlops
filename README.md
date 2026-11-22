@@ -155,6 +155,40 @@ a valid tool call.
 The tests are themselves tested. `scripts/mutation_audit.py` breaks one safeguard at a time in a
 scratch copy and fails if the test suite does not notice.
 
+## AI-assisted development under written agent instructions; independent review register and mutation audit
+
+Much of this code was drafted with AI coding assistants, working under the standing instructions
+in [AGENTS.md](AGENTS.md). I set the design, the statistical method and the acceptance gates. I
+reviewed every change, and nothing reached this repository without my push.
+
+**Rules the assistants worked under**
+
+- The data splits, the four quality gates (G1–G4) and the coding standards are fixed in AGENTS.md.
+- Nothing is "done" on an assistant's say-so. The rule, written at the top of the
+  [review register](docs/REVIEW_ISSUES.md), has three states: implemented; verified (lint and
+  tests pass, the fix is confirmed on the real snapshot by independent code, and
+  `scripts/mutation_audit.py` catches every deliberate breakage); and done (verified, and CI green
+  on the pushed commit).
+- In the QA agent, a language model may only choose a tool. Every number in an answer comes from
+  tested code (gate G4).
+
+**What the review caught**
+
+Before freezing the model, on 15 November 2026, I conducted an adversarial review of the whole
+repository. Every issue is logged in the register, which now holds 115 items, 9 of them open. Two
+defects that the test suite of the time passed:
+
+- **B6:** the provenance test compared a file's hash with itself, so it could never fail.
+- **C2 and B3:** the leakage assertions were tautological and missed a lag bug: a row-based shift
+  gave 48 wrong 24-hour lag values around four missing hours in the French data.
+
+And one result that could not be reproduced: coverage had been reported as 91.63% and 89.26%.
+Reproduced on the same data, France came to 80.33%, which led to weekly recalibration (D2) and to
+retiring the earlier numbers.
+
+Passing tests were not evidence of correct code, which is why the tests are themselves tested by
+the breakage audit.
+
 ## Quick start
 
 Requires Python 3.11 or newer.
