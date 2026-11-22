@@ -157,14 +157,14 @@ scratch copy and fails if the test suite does not notice.
 
 ## AI-assisted development under written agent instructions; adversarial review register and mutation audit
 
-Much of this code was drafted with AI coding assistants, working under the standing instructions
-in [AGENTS.md](AGENTS.md). I set the design, the statistical method and the acceptance gates. I
+Much of this code was drafted with an AI coding assistant (Claude Code), working under the standing
+instructions in [AGENTS.md](AGENTS.md). I set the design, the statistical method and the acceptance gates. I
 reviewed every change, and nothing reached this repository without my push.
 
-**Rules the assistants worked under**
+**Rules the assistant worked under**
 
 - The data splits, the four quality gates (G1–G4) and the coding standards are fixed in AGENTS.md.
-- Nothing is "done" on an assistant's say-so. The rule, written at the top of the
+- Nothing is "done" on the assistant's say-so. The rule, written at the top of the
   [review register](docs/REVIEW_ISSUES.md), has three states: implemented; verified (lint and
   tests pass, the fix is confirmed on the real snapshot by independent code, and
   `scripts/mutation_audit.py` catches every deliberate breakage); and done (verified, and CI green
