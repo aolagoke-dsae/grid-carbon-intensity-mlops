@@ -485,6 +485,13 @@ image). CI on `40aec70` (2026-11-21): both jobs green; the image was built and t
 After the pipeline step was added to the `docker-image` job (2026-11-21): lint clean, 134 tests,
 breakage audit 105 of 105 caught, including the new case that turns the pipeline step into a dry run.
 
+Full audit on 2026-11-22 at commit `69aed92`: the untouched scratch copy passed, and 105 of 105
+breakages were caught, 0 survived, 0 stale; lint clean, 136 tests. Three commits since the previous
+full run had been checked with a single audit case only: the README section on AI-assisted
+development (with a test that ties its figures to this register), `AGENTS.md` added to the files
+the audit copies (the README links to it, so the scratch copy failed without it), and a test for
+local speaker notes that is skipped where those notes do not exist. None of them added an audit case.
+
 ## Dependencies
 
 - B before D: fixing lags and partial hours changes the training data.
